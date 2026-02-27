@@ -1,0 +1,32 @@
+pipeline:
+  B: 100                    # number of downsampled training subsets
+  minority_ratio: 0.4       # minority:majority = 2:3 → 0.4 of majority
+  test_split: 0.5           # 50/50 train/test
+  cv_folds: 5               # for hyperparameter tuning
+  random_seed: 42
+
+llm:
+  model: "qwen/qwen3-coder:free"   # OpenRouter model slug
+  temperature: 0.0                 # deterministic for profiler + orchestrator
+  max_tokens: 1200
+  max_retries: 3
+
+evaluation:
+  shap_top_H: 5             # H: number of top features for S_exp
+  alpha_gen: [0.5, 0.5]     # weights for e_gen = α1·Acc + α2·Spec
+  alpha_rob: [0.5, 0.5]     # weights for S_rob
+  alpha_par: [0.333, 0.333, 0.334]   # EOP, FPR, DP weights
+  alpha_dep: [0.333, 0.333, 0.334]   # rob, par, exp weights
+
+models:
+  candidate_set: [LR, BR, KNN, SVM, DT, RF, MLP, ResNet, VAE]
+  hyperparams:
+    LR:     { C: [0.001, 0.01, 0.1, 1, 10, 100, 1000] }
+    BR:     { sigma: [1, 5, 10, 15, 20] }
+    KNN:    { k: [1, 3, 5, 10] }
+    SVM:    { C: [0.001, 0.01, 0.1, 1, 10, 100, 1000] }
+    DT:     { max_depth: [1, 2, 3, 4, 5] }
+    RF:     { n_estimators: [10, 50, 100, 200, 300, 400] }
+    MLP:    { lr: [0.001, 0.005, 0.01, 0.05, 0.1] }
+    ResNet: { lr: [0.001, 0.005, 0.01, 0.05, 0.1] }
+    VAE:    { lr: [0.001, 0.005, 0.01, 0.05, 0.1] }

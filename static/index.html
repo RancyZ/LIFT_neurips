@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LIFT Framework</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:    #4f46e5;
+      --blue-lt: #eef2ff;
+      --green:   #16a34a;
+      --green-lt:#f0fdf4;
+      --red:     #dc2626;
+      --red-lt:  #fef2f2;
+      --amber:   #d97706;
+      --gray:    #6b7280;
+      --gray-lt: #f9fafb;
+      --border:  #e5e7eb;
+      --text:    #111827;
+      --muted:   #6b7280;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ───────────────────────────────────────── */
+    header {
+      background: #1e1b4b;
+      color: #fff;
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header .logo { display: flex; align-items: center; gap: 10px; }
+    header .logo svg { width: 28px; height: 28px; }
+    header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+    header .sub { font-size: 0.75rem; color: #a5b4fc; margin-top: 1px; }
+    header .badge {
+      background: #312e81; color: #c7d2fe;
+      padding: 4px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;
+    }
+
+    /* ── Layout ───────────────────────────────────────── */
+    .main {
+      max-width: 1140px; margin: 28px auto; padding: 0 16px;
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      grid-template-rows: auto;
+      gap: 20px;
+    }
+
+    /* ── Card ─────────────────────────────────────────── */
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      padding: 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .card-title {
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted); margin-bottom: 18px;
+    }
+
+    /* ── Upload zone ──────────────────────────────────── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      position: relative;
+    }
+    .upload-zone:hover { border-color: var(--blue); background: var(--blue-lt); }
+    .upload-zone.drag  { border-color: var(--blue); background: var(--blue-lt); }
+    .upload-zone.ready { border-color: var(--green); background: var(--green-lt); }
+    .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+    .upload-zone p { font-size: 0.85rem; color: var(--muted); }
+    .upload-zone .file-name { font-size: 0.85rem; font-weight: 600; color: var(--green); margin-top: 4px; }
+
+    /* ── Form fields ──────────────────────────────────── */
+    .field { margin-top: 14px; }
+    label { display: block; font-size: 0.73rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+    input[type=text], select, textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 8px; font-size: 0.875rem; background: #fff;
+      color: var(--text); transition: border-color .2s;
+    }
+    input[type=text]:focus, select:focus {
+      outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px #e0e7ff;
+    }
+
+    .run-btn {
+      width: 100%; margin-top: 20px; padding: 11px;
+      background: var(--blue); color: #fff; border: none; border-radius: 8px;
+      font-size: 0.95rem; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: background .2s, transform .1s;
+    }
+    .run-btn:hover:not(:disabled) { background: #4338ca; }
+    .run-btn:active:not(:disabled) { transform: scale(.98); }
+    .run-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    /* ── Pipeline stepper ─────────────────────────────── */
+    .stepper { display: flex; flex-direction: column; gap: 0; }
+
+    .step {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 10px 0; position: relative;
+    }
+    /* connector line */
+    .step:not(:last-child)::after {
+      content: '';
+      position: absolute; left: 16px; top: 40px;
+      width: 2px; height: calc(100% - 16px);
+      background: var(--border);
+      transition: background .4s;
+    }
+    .step.done::after   { background: var(--green); }
+    .step.running::after{ background: var(--blue-lt); }
+
+    .step-icon {
+      width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 700;
+      border: 2px solid var(--border); background: #fff; color: var(--muted);
+      transition: all .3s;
+    }
+    .step.running .step-icon {
+      border-color: var(--blue); background: var(--blue); color: #fff;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    .step.done .step-icon {
+      border-color: var(--green); background: var(--green); color: #fff;
+    }
+    .step.error .step-icon {
+      border-color: var(--red); background: var(--red); color: #fff;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(79,70,229,.4); }
+      50%       { box-shadow: 0 0 0 7px rgba(79,70,229,0); }
+    }
+
+    .step-body { flex: 1; padding-top: 5px; min-width: 0; }
+    .step-name {
+      font-size: 0.9rem; font-weight: 600; color: var(--text);
+      transition: color .3s;
+    }
+    .step.running .step-name { color: var(--blue); }
+    .step.done    .step-name { color: var(--green); }
+    .step-sub { font-size: 0.75rem; color: var(--muted); margin-top: 1px; }
+    .step-detail {
+      font-size: 0.78rem; color: var(--muted);
+      margin-top: 5px; line-height: 1.5;
+      max-height: 0; overflow: hidden;
+      transition: max-height .4s ease;
+    }
+    .step.done .step-detail, .step.running .step-detail { max-height: 200px; }
+
+    /* sub-stage tags */
+    .stage-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;
+      background: #e0e7ff; color: var(--blue);
+    }
+    .tag.active { background: var(--blue); color: #fff; }
+    .tag.done   { background: var(--green-lt); color: var(--green); }
+
+    /* model chips */
+    .model-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .chip {
+      padding: 2px 8px; border-radius: 5px; font-size: 0.72rem; font-weight: 600;
+      background: #f3f4f6; color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    /* ── Error banner ─────────────────────────────────── */
+    .error-bar {
+      display: none; background: var(--red-lt); border: 1px solid #fca5a5;
+      border-radius: 8px; padding: 10px 14px; color: var(--red);
+      font-size: 0.83rem; margin-top: 12px;
+    }
+    .error-bar.show { display: block; }
+
+    /* ── Results ──────────────────────────────────────── */
+    .results-wrap {
+      grid-column: 1 / -1;
+      display: none;
+    }
+    .results-wrap.show { display: block; }
+
+    .results-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    }
+    .results-header h2 { font-size: 1rem; font-weight: 700; }
+
+    /* Primary hero */
+    .primary-card {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+      color: #fff; border-radius: 14px; padding: 24px 28px;
+      margin-bottom: 16px;
+      display: flex; align-items: flex-start; gap: 20px;
+    }
+    .primary-model-name {
+      font-size: 2.5rem; font-weight: 800; letter-spacing: -.02em;
+      line-height: 1; margin-bottom: 6px;
+    }
+    .primary-label { font-size: 0.72rem; font-weight: 700;
+                     text-transform: uppercase; letter-spacing: .1em;
+                     color: #a5b4fc; margin-bottom: 8px; }
+    .primary-rationale { font-size: 0.85rem; color: #c7d2fe; line-height: 1.6; }
+
+    /* Results grid */
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .res-card { background: #fff; border-radius: 12px; padding: 18px;
+                border: 1px solid var(--border); }
+    .res-card h3 { font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+                   letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
+
+    .model-row { padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .model-row:last-child { border-bottom: none; }
+    .model-row strong { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+    .model-row p { font-size: 0.78rem; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+
+    .avoid-row strong { color: var(--red); }
+
+    /* Scoreboard */
+    .scoreboard table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .scoreboard th {
+      text-align: left; padding: 5px 8px;
+      background: var(--gray-lt); font-weight: 700;
+      color: var(--muted); font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .scoreboard td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+    .score-cell { font-weight: 600; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; }
+
+    /* Actions accordion */
+    .actions-card { background: #fff; border-radius: 12px; padding: 18px;
+                    border: 1px solid var(--border); margin-bottom: 16px; }
+    .actions-card h3 { font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+                       letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
+    .model-actions { margin-bottom: 10px; }
+    .model-actions summary {
+      font-size: 0.85rem; font-weight: 600; cursor: pointer;
+      padding: 6px 0; color: var(--text); list-style: none;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .model-actions summary::before { content: '›'; color: var(--muted); transition: transform .2s; }
+    details[open] .model-actions summary::before { transform: rotate(90deg); }
+    .action-list { list-style: none; padding-left: 16px; margin-top: 6px; }
+    .action-list li {
+      font-size: 0.8rem; color: var(--muted); padding: 3px 0;
+      padding-left: 14px; position: relative;
+    }
+    .action-list li::before { content: '→'; position: absolute; left: 0; color: var(--blue); }
+
+    /* Stage interpretations */
+    .interp-card { background: #fff; border-radius: 12px; padding: 18px;
+                   border: 1px solid var(--border); }
+    .interp-card h3 { font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+                      letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
+    .interp-row { padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .interp-row:last-child { border-bottom: none; }
+    .interp-stage { font-size: 0.78rem; font-weight: 700; color: var(--blue);
+                    font-family: monospace; margin-bottom: 3px; }
+    .interp-text  { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+
+    /* Spinner SVG */
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 28 28" fill="none">
+      <rect width="28" height="28" rx="7" fill="#4f46e5"/>
+      <path d="M7 21 L14 7 L21 21" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <line x1="9.5" y1="16" x2="18.5" y2="16" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>LIFT Framework</h1>
+      <div class="sub">Lifecycle-based Integrity &amp; Fidelity Testing</div>
+    </div>
+  </div>
+  <div class="badge">IISE HSE 2026 · Noelle &amp; Meera</div>
+</header>
+
+<!-- ── Main grid ─────────────────────────────────────── -->
+<div class="main">
+
+  <!-- Left: configure run -->
+  <div class="card" style="align-self: start;">
+    <div class="card-title">Configure Run</div>
+
+    <form id="run-form" autocomplete="off">
+
+      <!-- Upload zone -->
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" accept=".csv" id="csv-input" name="file" required />
+        <div class="upload-icon">📂</div>
+        <p>Drop your CSV dataset here<br>or click to browse</p>
+        <p class="file-name" id="file-name-display" style="display:none"></p>
+      </div>
+
+      <div class="field">
+        <label>Clinical Domain</label>
+        <input type="text" name="domain" placeholder="e.g. Type 1 diabetes risk prediction" required value="Type 1 diabetes risk prediction" />
+      </div>
+      <div class="field">
+        <label>Outcome Column</label>
+        <input type="text" name="outcome_col" placeholder="e.g. y" required value="y" />
+      </div>
+      <div class="field">
+        <label>Protected Attribute Column</label>
+        <input type="text" name="protected_col" placeholder="e.g. race" required value="race" />
+      </div>
+      <div class="field">
+        <label>Cohort Notes</label>
+        <input type="text" name="cohort_notes" placeholder="e.g. TEDDY-derived SNP cohort" required value="TEDDY-derived SNP cohort" />
+      </div>
+      <div class="field">
+        <label>LLM Backend</label>
+        <select name="llm_model">
+          <option value="qwen/qwen3-coder:free" selected>Qwen3 Coder 480B A35B — free (OpenRouter)</option>
+          <option value="qwen/qwen3-235b-a22b">Qwen3 235B-A22B (OpenRouter)</option>
+          <option value="qwen/qwq-32b">QwQ 32B (OpenRouter)</option>
+          <option value="gpt-4o">GPT-4o (OpenAI)</option>
+          <option value="gpt-4o-mini">GPT-4o-mini (OpenAI · faster)</option>
+          <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Anthropic)</option>
+        </select>
+      </div>
+
+      <button type="submit" class="run-btn" id="run-btn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <polygon points="4,2 14,8 4,14" fill="currentColor"/>
+        </svg>
+        Run LIFT Pipeline
+      </button>
+
+      <div class="error-bar" id="error-bar"></div>
+    </form>
+  </div>
+
+  <!-- Right: pipeline progress -->
+  <div class="card">
+    <div class="card-title">Pipeline Progress</div>
+    <div class="stepper" id="stepper">
+
+      <div class="step pending" data-stage="profiling">
+        <div class="step-icon">1</div>
+        <div class="step-body">
+          <div class="step-name">Data Profiling</div>
+          <div class="step-sub">Agent 1 · Φ_data — population integrity &amp; data bias</div>
+          <div class="step-detail" id="detail-profiling"></div>
+        </div>
+      </div>
+
+      <div class="step pending" data-stage="orchestrating">
+        <div class="step-icon">2</div>
+        <div class="step-body">
+          <div class="step-name">Model Orchestration</div>
+          <div class="step-sub">Agent 2 · Φ_model — rubric scoring &amp; stage selection</div>
+          <div class="step-detail" id="detail-orchestrating"></div>
+        </div>
+      </div>
+
+      <div class="step pending" data-stage="preprocessing">
+        <div class="step-icon">3</div>
+        <div class="step-body">
+          <div class="step-name">Preprocessing</div>
+          <div class="step-sub">Impute · Stratified split · B downsampled subsets</div>
+          <div class="step-detail" id="detail-preprocessing"></div>
+        </div>
+      </div>
+
+      <div class="step pending" data-stage="lifecycle">
+        <div class="step-icon">4</div>
+        <div class="step-body">
+          <div class="step-name">Lifecycle Evaluation</div>
+          <div class="step-sub">l1 · l2 · l3 · l4 — per model, parallelised</div>
+          <div class="step-detail" id="detail-lifecycle"></div>
+        </div>
+      </div>
+
+      <div class="step pending" data-stage="reporting">
+        <div class="step-icon">5</div>
+        <div class="step-body">
+          <div class="step-name">Governance Report</div>
+          <div class="step-sub">Agent 3 · Φ_rep — synthesis &amp; recommendations</div>
+          <div class="step-detail" id="detail-reporting"></div>
+        </div>
+      </div>
+
+    </div><!-- /stepper -->
+  </div>
+
+  <!-- Results (full width, hidden until done) -->
+  <div class="results-wrap" id="results-wrap">
+    <div class="results-header">
+      <span style="font-size:1.3rem">✅</span>
+      <h2>Governance Report</h2>
+    </div>
+
+    <!-- Primary model hero -->
+    <div class="primary-card" id="primary-card">
+      <div>
+        <div class="primary-label">Primary Recommendation</div>
+        <div class="primary-model-name" id="primary-model-name">—</div>
+      </div>
+      <div style="flex:1">
+        <div class="primary-rationale" id="primary-rationale"></div>
+      </div>
+    </div>
+
+    <!-- 3-column grid -->
+    <div class="results-grid">
+
+      <div class="res-card">
+        <h3>Alternative Models</h3>
+        <div id="alternatives-list"></div>
+      </div>
+
+      <div class="res-card">
+        <h3>Models to Avoid</h3>
+        <div id="avoid-list"></div>
+      </div>
+
+      <div class="res-card scoreboard">
+        <h3>Scoreboard</h3>
+        <div id="scoreboard-wrap"></div>
+      </div>
+
+    </div>
+
+    <!-- Improvement actions -->
+    <div class="actions-card" id="actions-card">
+      <h3>Improvement Actions</h3>
+      <div id="actions-list"></div>
+    </div>
+
+    <!-- Stage interpretations -->
+    <div class="interp-card" id="interp-card">
+      <h3>Stage Interpretations</h3>
+      <div id="interp-list"></div>
+    </div>
+
+  </div><!-- /results-wrap -->
+
+</div><!-- /main -->
+
+<script>
+// ── State ──────────────────────────────────────────────
+let es = null;
+let scoreboard = [];
+
+// ── Upload zone ────────────────────────────────────────
+const zone     = document.getElementById('upload-zone');
+const csvInput = document.getElementById('csv-input');
+const nameDisp = document.getElementById('file-name-display');
+
+zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', ()=> zone.classList.remove('drag'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+csvInput.addEventListener('change', () => { if (csvInput.files[0]) setFile(csvInput.files[0]); });
+
+function setFile(f) {
+  // Manually assign to input (for FormData later)
+  const dt = new DataTransfer();
+  dt.items.add(f);
+  csvInput.files = dt.files;
+  zone.classList.add('ready');
+  nameDisp.textContent = f.name;
+  nameDisp.style.display = 'block';
+  zone.querySelector('p:first-of-type').style.display = 'none';
+  zone.querySelector('.upload-icon').textContent = '✅';
+}
+
+// ── Form submit ────────────────────────────────────────
+document.getElementById('run-form').addEventListener('submit', async e => {
+  e.preventDefault();
+
+  // Reset UI
+  resetSteps();
+  hideResults();
+  hideError();
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('run-btn').textContent = 'Running…';
+  scoreboard = [];
+
+  const fd = new FormData(e.target);
+
+  try {
+    const res = await fetch('/run', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const msg = await res.text();
+      showError('Server error: ' + msg);
+      resetBtn();
+      return;
+    }
+    const { run_id } = await res.json();
+    startStream(run_id);
+  } catch (err) {
+    showError('Network error: ' + err.message);
+    resetBtn();
+  }
+});
+
+// ── SSE stream ─────────────────────────────────────────
+function startStream(run_id) {
+  if (es) es.close();
+  es = new EventSource(`/stream/${run_id}`);
+
+  es.onmessage = e => {
+    const evt = JSON.parse(e.data);
+    handleEvent(evt);
+  };
+
+  es.onerror = () => {
+    showError('Connection to server lost. The pipeline may still be running — check server logs.');
+    es.close();
+    resetBtn();
+  };
+}
+
+function handleEvent(evt) {
+  const { stage, status, data, message, report } = evt;
+
+  if (stage === 'upload') {
+    // Instant feedback (already handled by form submit)
+    return;
+  }
+
+  if (stage === 'pipeline_done') {
+    markDone('reporting');
+    renderReport(report, scoreboard);
+    showResults();
+    resetBtn();
+    es.close();
+    return;
+  }
+
+  if (stage === 'error') {
+    showError(message || 'An unexpected error occurred.');
+    resetBtn();
+    es.close();
+    return;
+  }
+
+  // Normal stage update
+  const stepEl = document.querySelector(`[data-stage="${stage}"]`);
+  if (!stepEl) return;
+
+  if (status === 'running') {
+    markRunning(stage);
+    if (stage === 'lifecycle' && data?.activated_stages) {
+      renderLifecycleTags(data.activated_stages, 'running');
+    }
+  } else if (status === 'done') {
+    markDone(stage);
+    renderDetail(stage, data);
+    if (stage === 'lifecycle' && data?.scoreboard) {
+      scoreboard = data.scoreboard;
+      renderLifecycleTags(
+        [...new Set(data.scoreboard.map(r => r.stage_id))],
+        'done'
+      );
+    }
+  }
+}
+
+// ── Step state helpers ──────────────────────────────────
+function markRunning(stage) {
+  const el = document.querySelector(`[data-stage="${stage}"]`);
+  if (!el) return;
+  el.className = 'step running';
+  el.querySelector('.step-icon').innerHTML = spinnerSVG();
+}
+
+function markDone(stage) {
+  const el = document.querySelector(`[data-stage="${stage}"]`);
+  if (!el) return;
+  el.className = 'step done';
+  el.querySelector('.step-icon').textContent = '✓';
+}
+
+function resetSteps() {
+  const steps = [
+    { stage: 'profiling',     n: 1 },
+    { stage: 'orchestrating', n: 2 },
+    { stage: 'preprocessing', n: 3 },
+    { stage: 'lifecycle',     n: 4 },
+    { stage: 'reporting',     n: 5 },
+  ];
+  steps.forEach(({ stage, n }) => {
+    const el = document.querySelector(`[data-stage="${stage}"]`);
+    if (!el) return;
+    el.className = 'step pending';
+    el.querySelector('.step-icon').textContent = n;
+    const det = document.getElementById(`detail-${stage}`);
+    if (det) det.innerHTML = '';
+  });
+}
+
+function spinnerSVG() {
+  return `<svg class="spin" width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <circle cx="8" cy="8" r="6" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+    <path d="M8 2 A6 6 0 0 1 14 8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  </svg>`;
+}
+
+// ── Detail renderers ────────────────────────────────────
+function renderDetail(stage, data) {
+  const el = document.getElementById(`detail-${stage}`);
+  if (!el || !data) return;
+
+  if (stage === 'profiling') {
+    el.innerHTML = `
+      <table style="font-size:.78rem;border-collapse:collapse;width:100%;margin-top:4px;">
+        <tr><td style="padding:2px 8px 2px 0;color:var(--muted)">Samples</td><td style="font-weight:700">${data.N?.toLocaleString()}</td>
+            <td style="padding:2px 8px 2px 8px;color:var(--muted)">Features</td><td style="font-weight:700">${data.P}</td></tr>
+        <tr><td style="padding:2px 8px 2px 0;color:var(--muted)">Missing</td><td>${(data.C*100).toFixed(1)}%</td>
+            <td style="padding:2px 8px 2px 8px;color:var(--muted)">Num/Cat</td><td>${data.P_num}/${data.P_cat}</td></tr>
+        <tr><td style="padding:2px 8px 2px 0;color:var(--muted)">I_out</td><td>${data.I_out}</td>
+            <td style="padding:2px 8px 2px 8px;color:var(--muted)">I_pop</td><td>${data.I_pop}</td></tr>
+      </table>`;
+  } else if (stage === 'orchestrating') {
+    const models = (data.models || []).map(m =>
+      `<span class="chip">${m}</span>`).join('');
+    const stages = (data.stages || []).map(s =>
+      `<span class="tag done">${s.replace('_', ' ')}</span>`).join('');
+    el.innerHTML = `<div class="model-chips" style="margin-top:4px">${models}</div>
+                    <div class="stage-tags" style="margin-top:6px">${stages}</div>`;
+  } else if (stage === 'preprocessing') {
+    el.innerHTML = `<span style="color:var(--green)">✓</span>
+      ${data.D_tr?.toLocaleString()} train · ${data.D_te?.toLocaleString()} test ·
+      <strong>${data.B}</strong> subsets created`;
+  } else if (stage === 'lifecycle') {
+    // Tags rendered separately; just add done note
+    el.innerHTML += `<div style="margin-top:4px;color:var(--green);font-size:.78rem">
+      All stages complete — scores normalised to [0,1]</div>`;
+  } else if (stage === 'reporting') {
+    el.innerHTML = `<span style="color:var(--green)">✓</span> Report generated`;
+  }
+}
+
+function renderLifecycleTags(stages, state) {
+  const el = document.getElementById('detail-lifecycle');
+  const stageLabels = {
+    l1_learning_opt:    'l1 · Learning Opt',
+    l2_generalizability:'l2 · Generalizability',
+    l3_deployment:      'l3 · Deployment',
+    l4_monitoring:      'l4 · Monitoring',
+  };
+  const tags = stages.map(s =>
+    `<span class="tag ${state}">${stageLabels[s] || s}</span>`
+  ).join('');
+  // Replace first child (the tags line) or prepend
+  let tagWrap = el.querySelector('.stage-tags');
+  if (!tagWrap) {
+    tagWrap = document.createElement('div');
+    tagWrap.className = 'stage-tags';
+    el.prepend(tagWrap);
+  }
+  tagWrap.innerHTML = tags;
+}
+
+// ── Results section ─────────────────────────────────────
+function renderReport(report, scoreboardData) {
+  // Primary
+  document.getElementById('primary-model-name').textContent = report.primary_model || '—';
+  document.getElementById('primary-rationale').textContent  = report.primary_rationale || '';
+
+  // Alternatives
+  const altEl = document.getElementById('alternatives-list');
+  altEl.innerHTML = (report.alternatives || []).map(a => `
+    <div class="model-row">
+      <strong>${a.model || a.model_id || ''}</strong>
+      <p>${a.rationale || ''}</p>
+    </div>`).join('') || '<p style="font-size:.82rem;color:var(--muted)">None specified</p>';
+
+  // Avoid
+  const avoidEl = document.getElementById('avoid-list');
+  avoidEl.innerHTML = (report.avoid || []).map(a => `
+    <div class="model-row avoid-row">
+      <strong>${a.model || a.model_id || ''}</strong>
+      <p>${a.reason || ''}</p>
+    </div>`).join('') || '<p style="font-size:.82rem;color:var(--muted)">None specified</p>';
+
+  // Scoreboard
+  renderScoreboard(scoreboardData);
+
+  // Actions
+  const actEl = document.getElementById('actions-list');
+  const acts = report.improvement_actions || {};
+  actEl.innerHTML = Object.entries(acts).map(([model, actions]) => `
+    <details>
+      <div class="model-actions">
+        <summary>${model}</summary>
+        <ul class="action-list">
+          ${(actions || []).map(a => `<li>${a}</li>`).join('')}
+        </ul>
+      </div>
+    </details>`).join('') || '<p style="font-size:.82rem;color:var(--muted)">No actions</p>';
+
+  // Stage interpretations
+  const interpEl = document.getElementById('interp-list');
+  const interps = report.stage_interpretations || {};
+  interpEl.innerHTML = Object.entries(interps).map(([stage, text]) => `
+    <div class="interp-row">
+      <div class="interp-stage">${stage}</div>
+      <div class="interp-text">${text}</div>
+    </div>`).join('') || '<p style="font-size:.82rem;color:var(--muted)">No interpretations</p>';
+}
+
+function renderScoreboard(data) {
+  const wrap = document.getElementById('scoreboard-wrap');
+  if (!data || data.length === 0) {
+    wrap.innerHTML = '<p style="font-size:.82rem;color:var(--muted)">No scores available</p>';
+    return;
+  }
+
+  // Build model × stage matrix
+  const models = [...new Set(data.map(r => r.model_id))].sort();
+  const stages = [...new Set(data.map(r => r.stage_id))].sort();
+
+  const lookup = {};
+  data.forEach(r => { lookup[`${r.model_id}__${r.stage_id}`] = r.score; });
+
+  const stageLabels = { l1_learning_opt:'l1', l2_generalizability:'l2',
+                        l3_deployment:'l3', l4_monitoring:'l4' };
+
+  let html = '<table><thead><tr><th>Model</th>';
+  stages.forEach(s => { html += `<th>${stageLabels[s] || s}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  models.forEach(m => {
+    html += `<tr><td style="font-weight:700">${m}</td>`;
+    stages.forEach(s => {
+      const v = lookup[`${m}__${s}`];
+      if (v === undefined) { html += '<td>—</td>'; return; }
+      const pct = Math.round(v * 100);
+      const bg  = scoreColor(v);
+      html += `<td><span class="score-cell" style="background:${bg.bg};color:${bg.fg}">${pct}%</span></td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function scoreColor(v) {
+  if (v >= 0.7) return { bg: '#dcfce7', fg: '#15803d' };
+  if (v >= 0.4) return { bg: '#fef9c3', fg: '#92400e' };
+  return { bg: '#fee2e2', fg: '#991b1b' };
+}
+
+// ── UI helpers ─────────────────────────────────────────
+function showResults() { document.getElementById('results-wrap').classList.add('show'); }
+function hideResults() { document.getElementById('results-wrap').classList.remove('show'); }
+function showError(msg) {
+  const el = document.getElementById('error-bar');
+  el.textContent = '⚠ ' + msg;
+  el.classList.add('show');
+}
+function hideError() { document.getElementById('error-bar').classList.remove('show'); }
+function resetBtn() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <polygon points="4,2 14,8 4,14" fill="currentColor"/></svg> Run LIFT Pipeline`;
+}
+</script>
+</body>
+</html>

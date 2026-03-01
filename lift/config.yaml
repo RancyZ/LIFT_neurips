@@ -6,10 +6,10 @@ pipeline:
   random_seed: 42
 
 llm:
-  model: "qwen/qwen3-coder:free"   # OpenRouter model slug
+  model: "meta-llama/llama-3.3-70b-instruct:free"   # OpenRouter model slug
   temperature: 0.0                 # deterministic for profiler + orchestrator
   max_tokens: 1200
-  max_retries: 3
+  max_retries: 5
 
 evaluation:
   shap_top_H: 5             # H: number of top features for S_exp

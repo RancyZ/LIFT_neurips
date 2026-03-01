@@ -49,7 +49,7 @@ logging.basicConfig(
 
 app = FastAPI(title="LIFT Framework")
 
-# In-memory run store: run_id → {"queue": Queue}
+# In-memory run store: run_id → {"queue": Queue, "stop_event": Event}
 run_store: dict = {}
 
 
@@ -79,12 +79,18 @@ async def start_run(
     """
     run_id = str(uuid.uuid4())[:8]
     q: q_module.Queue = q_module.Queue()
-    run_store[run_id] = {"queue": q}
+    stop_event = threading.Event()
+    run_store[run_id] = {"queue": q, "stop_event": stop_event}
 
     # Read bytes now — UploadFile is not thread-safe
     content = await file.read()
 
     def run_pipeline() -> None:
+        def progress_fn(event: dict) -> None:
+            q.put(event)
+            if stop_event.is_set():
+                raise InterruptedError("Run stopped by user.")
+
         try:
             df = pd.read_csv(io.BytesIO(content))
             q.put({
@@ -116,8 +122,10 @@ async def start_run(
                 cohort_notes=cohort_notes,
             )
 
-            pipeline.run(df, xi, _progress_fn=q.put)
+            pipeline.run(df, xi, _progress_fn=progress_fn, _stop_check=stop_event.is_set)
 
+        except InterruptedError:
+            q.put({"stage": "error", "status": "error", "message": "Run stopped by user."})
         except Exception as exc:  # noqa: BLE001
             logging.exception("Pipeline error for run %s", run_id)
             q.put({"stage": "error", "status": "error", "message": str(exc)})
@@ -126,6 +134,16 @@ async def start_run(
     thread.start()
 
     return JSONResponse({"run_id": run_id})
+
+
+@app.post("/stop/{run_id}")
+async def stop_run(run_id: str) -> JSONResponse:
+    """Signals the pipeline thread to stop after the current stage."""
+    entry = run_store.get(run_id)
+    if not entry:
+        return JSONResponse({"ok": False, "error": "Run not found"}, status_code=404)
+    entry["stop_event"].set()
+    return JSONResponse({"ok": True})
 
 
 @app.get("/stream/{run_id}")

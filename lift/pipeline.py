@@ -53,6 +53,7 @@ class LIFTPipeline:
         df: pd.DataFrame,
         xi: DatasetContext,
         _progress_fn=None,
+        _stop_check=None,
     ) -> GovReport:
         """
         Full pipeline execution.
@@ -68,6 +69,10 @@ class LIFTPipeline:
         def emit(event: dict) -> None:
             if _progress_fn:
                 _progress_fn(event)
+
+        def check_stop() -> None:
+            if _stop_check and _stop_check():
+                raise InterruptedError("Run stopped by user.")
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         dataset_tag = _safe_tag(xi.domain)
@@ -86,18 +91,21 @@ class LIFTPipeline:
             "P_num": profile.P_num, "P_cat": profile.P_cat,
         }})
 
+        check_stop()
+
         # Step 2: Orchestrate
         logger.info("Step 2: Orchestrating model selection …")
         emit({"stage": "orchestrating", "status": "running"})
         decision = self._orchestrator.decide(profile)
-        model_ids = [ms.model_id for ms in decision.selected_models]
+        model_ids = decision.selected_model_ids()
         logger.info("  Selected models: %s", model_ids)
-        logger.info("  Activated stages: %s", decision.activated_stages)
+        logger.info("  Activated stages: %s", decision.globally_activated_stages())
         emit({"stage": "orchestrating", "status": "done", "data": {
             "models": model_ids,
-            "stages": decision.activated_stages,
-            "stage_justification": decision.stage_justification,
+            "stages": decision.globally_activated_stages(),
         }})
+
+        check_stop()
 
         # Step 3: Preprocess
         logger.info("Step 3: Preprocessing (B=%d subsets) …",
@@ -118,10 +126,12 @@ class LIFTPipeline:
             "D_te": len(D_te),
         }})
 
+        check_stop()
+
         # Step 4: Run lifecycle stages
         logger.info("Step 4: Running lifecycle stages …")
         emit({"stage": "lifecycle", "status": "running", "data": {
-            "activated_stages": decision.activated_stages,
+            "activated_stages": decision.globally_activated_stages(),
             "models": model_ids,
         }})
         run_config = dict(self.config)
@@ -134,6 +144,7 @@ class LIFTPipeline:
             subsets=subsets,
             decision=decision,
             config=run_config,
+            stop_check=_stop_check,
         )
         self.last_eval_results = eval_results
         scoreboard = [
@@ -141,6 +152,8 @@ class LIFTPipeline:
             for (mid, sid), r in eval_results.items()
         ]
         emit({"stage": "lifecycle", "status": "done", "data": {"scoreboard": scoreboard}})
+
+        check_stop()
 
         # Step 5: Generate governance report
         logger.info("Step 5: Generating governance report …")

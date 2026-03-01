@@ -24,16 +24,52 @@ def prepare_dataset(
 
     Pipeline:
     1. Feature-wise imputation (median for numeric, mode for categorical)
-    2. Stratified split on (outcome, protected) jointly — test_split=0.5
-    3. Downsample D_tr into B subsets:
+    2. One-hot encode categorical feature columns so all models receive numeric input.
+       The original protected_col string values are re-inserted after encoding so
+       lifecycle fairness stages can still group by protected attribute.
+    3. Stratified split on (outcome, protected) jointly — test_split=0.5
+    4. Downsample D_tr into B subsets:
        - minority:majority ratio = minority_ratio
        - each subset drawn with replacement from majority class
        - minority class kept in full
     """
     df = impute(df.copy())
+    df = encode_categorical(df, outcome_col, protected_col)
     D_tr, D_te = stratified_split(df, outcome_col, protected_col, test_split, random_seed)
     subsets = make_subsets(D_tr, outcome_col, B, minority_ratio, random_seed)
     return D_tr, D_te, subsets
+
+
+def encode_categorical(
+    df: pd.DataFrame,
+    outcome_col: str,
+    protected_col: str,
+) -> pd.DataFrame:
+    """
+    One-hot encode all object-dtype columns (excluding the outcome column).
+
+    The protected attribute is encoded for model input (so models get numeric
+    features) but the original string values are re-inserted under the same
+    column name so lifecycle fairness stages can still group by them.
+    """
+    # Columns with string/object dtype that need encoding (not outcome)
+    cat_cols = [
+        c for c in df.columns
+        if c != outcome_col and df[c].dtype == object
+    ]
+    if not cat_cols:
+        return df
+
+    # Save original protected values before they get replaced by dummies
+    protected_orig = df[protected_col].copy() if protected_col in cat_cols else None
+
+    df = pd.get_dummies(df, columns=cat_cols, drop_first=False)
+
+    # Re-insert original protected column for fairness grouping
+    if protected_orig is not None:
+        df[protected_col] = protected_orig.values
+
+    return df
 
 
 def impute(df: pd.DataFrame) -> pd.DataFrame:

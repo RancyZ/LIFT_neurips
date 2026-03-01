@@ -10,7 +10,7 @@ from typing import List
 
 import pandas as pd
 
-from lift.schemas import EvalResults, OrchestratorDecision, StageResult
+from lift.schemas import EvalResults, ModelLifecycleRoute, OrchestratorDecision, StageResult
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +21,15 @@ def run_lifecycle_stages(
     subsets: List[pd.DataFrame],
     decision: OrchestratorDecision,
     config: dict,
+    stop_check=None,
 ) -> EvalResults:
     """
     Dispatches to activated stage modules for each selected model.
     Returns EvalResults dict keyed (model_id, stage_id) → StageResult.
     Parallelises across models where possible.
     """
-    model_ids = [ms.model_id for ms in decision.selected_models]
-    stages = decision.activated_stages
+    model_routes = decision.model_routes
+    stages = decision.globally_activated_stages()
 
     outcome_col = config["_outcome_col"]
     protected_col = config.get("_protected_col", None)
@@ -46,20 +47,22 @@ def run_lifecycle_stages(
             config=config,
         )
 
-    def _run_model(model_id: str) -> dict:
+    def _run_model(route: ModelLifecycleRoute) -> dict:
+        model_id = route.model_id
+        model_stages = set(route.activated_stages.keys())
         results = {}
         try:
-            if "l1_learning_opt" in stages:
+            if "l1_learning_opt" in model_stages:
                 from lift.lifecycle.learning_opt import evaluate_learning_opt
                 r = evaluate_learning_opt(model_id, subsets, D_te, outcome_col, config)
                 results[(model_id, "l1_learning_opt")] = r
 
-            if "l2_generalizability" in stages:
+            if "l2_generalizability" in model_stages:
                 from lift.lifecycle.generalizability import evaluate_generalizability
                 r = evaluate_generalizability(model_id, subsets, D_te, outcome_col, config)
                 results[(model_id, "l2_generalizability")] = r
 
-            if "l3_deployment" in stages:
+            if "l3_deployment" in model_stages:
                 from lift.lifecycle.deployment import evaluate_deployment
                 r = evaluate_deployment(
                     model_id, subsets, D_te, outcome_col, protected_col, config
@@ -71,22 +74,24 @@ def run_lifecycle_stages(
         return results
 
     # Parallelise across models
-    with ThreadPoolExecutor(max_workers=min(4, len(model_ids))) as executor:
-        futures = {executor.submit(_run_model, mid): mid for mid in model_ids}
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(model_routes)))) as executor:
+        futures = {executor.submit(_run_model, route): route.model_id for route in model_routes}
         for future in as_completed(futures):
+            if stop_check and stop_check():
+                raise InterruptedError("Run stopped by user.")
             model_result = future.result()
             eval_results.update(model_result)
 
     # Attach monitoring results for each model
     if monitoring_result is not None:
-        for model_id in model_ids:
+        for route in model_routes:
             stage_result = StageResult(
                 stage_id="l4_monitoring",
-                model_id=model_id,
+                model_id=route.model_id,
                 score=monitoring_result.score,
                 raw=monitoring_result.raw,
             )
-            eval_results[(model_id, "l4_monitoring")] = stage_result
+            eval_results[(route.model_id, "l4_monitoring")] = stage_result
 
     # Normalise scores within each stage
     eval_results = _normalise_scores(eval_results, stages)

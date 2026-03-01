@@ -1,15 +1,33 @@
 """
 DataProfiler — Agent 1 (Φ_data).
-Computes deterministic stats from a DataFrame, then calls the LLM
-to produce a structured DataProfile (P_D).
+
+Paper reference: Section 3.1.1, Equation 1.
+  P_D ~ Φ_data(g(D, ξ_data))
+
+Design (per paper):
+- All numeric metrics are computed DETERMINISTICALLY from the DataFrame.
+- The LLM adds a clinical narrative interpreting those metrics in context.
+- DataProfile is built from deterministic stats, not from LLM output,
+  to ensure correctness and auditability.
+
+Metrics (Section 3.2.1):
+  C     = 1 - (1/NP) Σ_i Σ_j m_ij      (incompleteness over P feature cols only)
+  I_out = max_o(N_o) / min_o(N_o)       (outcome imbalance ratio)
+  I_pop = max_a(N_a) / min_a(N_a)       (population group imbalance ratio)
+  T     = {P_num, P_cat}                (feature type composition)
+  S     = N × P                         (dataset scale; stored as N and P separately)
 """
 from __future__ import annotations
+
+import logging
 
 import pandas as pd
 
 from lift.agents.base_agent import BaseAgent
 from lift.prompts import data_profiler_prompt as dp_prompt
 from lift.schemas import DataProfile, DatasetContext, LLMConfig
+
+logger = logging.getLogger(__name__)
 
 
 class DataProfiler(BaseAgent):
@@ -26,32 +44,54 @@ class DataProfiler(BaseAgent):
         xi: DatasetContext,
     ) -> DataProfile:
         """
-        Step 1: Compute deterministic stats from df.
-        Step 2: Build JSON-schema prompt from stats + xi.
-        Step 3: Call LLM → parse structured JSON → return DataProfile.
+        Step 1: Compute all metrics deterministically from df.
+        Step 2: Call LLM to produce a clinical narrative (not to recompute metrics).
+        Step 3: Build and return DataProfile from deterministic stats + LLM narrative.
         """
         stats = self._compute_stats(df, xi)
-        user_prompt = dp_prompt.build_user_prompt(stats, xi)
-        result = self.call_llm(
-            prompt=user_prompt,
-            system_prompt=dp_prompt.SYSTEM,
-            expect_json=True,
+
+        narrative = ""
+        try:
+            user_prompt = dp_prompt.build_user_prompt(stats, xi)
+            result = self.call_llm(
+                prompt=user_prompt,
+                system_prompt=dp_prompt.SYSTEM,
+                expect_json=True,
+            )
+            narrative = str(result.get("profile_narrative", ""))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("DataProfiler LLM narrative failed (non-fatal): %s", exc)
+
+        return DataProfile(
+            N=stats["N"],
+            P=stats["P"],
+            C=stats["C"],
+            P_num=stats["P_num"],
+            P_cat=stats["P_cat"],
+            I_out=stats["I_out"],
+            I_pop=stats["I_pop"],
+            domain=xi.domain,
+            protected_attr=xi.protected_col,
+            outcome_col=xi.outcome_col,
+            profile_narrative=narrative,
         )
-        return self._parse_profile(result, xi)
 
     # ------------------------------------------------------------------
-    # Deterministic statistics
+    # Deterministic statistics  (Section 3.2.1)
     # ------------------------------------------------------------------
 
     def _compute_stats(self, df: pd.DataFrame, xi: DatasetContext) -> dict:
         """
         Returns: { N, P, C, I_out, I_pop, P_num, P_cat }
 
-        C = 1 - (observed_cells / total_cells)
+        C = 1 - (1/NP) Σ_i Σ_j m_ij
+            Computed over the P predictive feature columns only,
+            excluding outcome (y) and protected attribute (a).
+
         I_out = max(class_counts) / min(class_counts)
         I_pop = max(group_counts) / min(group_counts)
         """
-        # Feature columns (exclude outcome and protected)
+        # P = predictive features, excluding y and a  (paper definition)
         feature_cols = [
             c for c in df.columns
             if c not in (xi.outcome_col, xi.protected_col)
@@ -60,16 +100,16 @@ class DataProfiler(BaseAgent):
         N = len(df)
         P = len(feature_cols)
 
-        # Incompleteness
-        total_cells = N * len(df.columns)
-        observed_cells = df.notna().sum().sum()
+        # Incompleteness: fraction of missing values over feature cells only
+        total_cells = N * P
+        observed_cells = int(df[feature_cols].notna().sum().sum()) if P > 0 else 0
         C = round(1.0 - observed_cells / total_cells, 6) if total_cells > 0 else 0.0
 
-        # Imbalance
+        # Imbalance ratios
         I_out = self._imbalance(df[xi.outcome_col])
         I_pop = self._imbalance(df[xi.protected_col])
 
-        # Feature types
+        # Feature type composition  T = {P_num, P_cat}
         feature_df = df[feature_cols]
         P_num = int(feature_df.select_dtypes(include="number").shape[1])
         P_cat = int(feature_df.select_dtypes(exclude="number").shape[1])
@@ -84,30 +124,10 @@ class DataProfiler(BaseAgent):
             "P_cat": P_cat,
         }
 
-    def _imbalance(self, series: pd.Series) -> float:
+    @staticmethod
+    def _imbalance(series: pd.Series) -> float:
+        """max_count / min_count across all values in series."""
         counts = series.dropna().value_counts()
         if len(counts) < 2:
             return 1.0
-        return round(counts.max() / counts.min(), 4)
-
-    # ------------------------------------------------------------------
-    # Parse LLM JSON → DataProfile
-    # ------------------------------------------------------------------
-
-    def _parse_profile(self, raw: dict, xi: DatasetContext) -> DataProfile:
-        pi = raw.get("population_integrity", {})
-        fc = raw.get("feature_characteristics", {})
-        db = raw.get("data_bias", {})
-
-        return DataProfile(
-            N=int(pi.get("N", 0)),
-            P=int(pi.get("P", 0)),
-            C=float(pi.get("C", 0.0)),
-            P_num=int(fc.get("P_num", 0)),
-            P_cat=int(fc.get("P_cat", 0)),
-            I_out=float(db.get("I_out", {}).get("value", 1.0)),
-            I_pop=float(db.get("I_pop", {}).get("value", 1.0)),
-            domain=xi.domain,
-            protected_attr=xi.protected_col,
-            outcome_col=xi.outcome_col,
-        )
+        return round(float(counts.max()) / float(counts.min()), 4)

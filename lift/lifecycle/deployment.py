@@ -43,7 +43,7 @@ def evaluate_deployment(
     alpha_dep = config.get("evaluation", {}).get("alpha_dep", [0.333, 0.333, 0.334])
     H = config.get("evaluation", {}).get("shap_top_H", 5)
 
-    X_te = D_te.drop(columns=[outcome_col])
+    X_te = D_te.drop(columns=[outcome_col]).select_dtypes(include="number")
     y_te = D_te[outcome_col].values
     groups_te = D_te[protected_col] if protected_col in D_te.columns else None
 
@@ -62,7 +62,7 @@ def evaluate_deployment(
         if len(subset) < 2:
             continue
 
-        X_b = subset.drop(columns=[outcome_col])
+        X_b = subset.drop(columns=[outcome_col]).select_dtypes(include="number")
         y_b = subset[outcome_col]
 
         best_params = tune_hyperparams(

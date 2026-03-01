@@ -30,11 +30,11 @@ def evaluate_monitoring(
 
     Score stored as raw drift value; pipeline inverts for scoreboard.
     """
-    X_te = D_te.drop(columns=[outcome_col])
+    X_te = D_te.drop(columns=[outcome_col]).select_dtypes(include="number")
 
     w_per_b: List[float] = []
     for subset in subsets:
-        X_b = subset.drop(columns=[outcome_col])
+        X_b = subset.drop(columns=[outcome_col]).select_dtypes(include="number")
         w = wasserstein_mean(X_b, X_te)
         w_per_b.append(w)
 

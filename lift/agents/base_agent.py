@@ -94,7 +94,7 @@ class BaseAgent:
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
                 if attempt < self.config.max_retries:
-                    wait = 2 ** attempt  # exponential back-off
+                    wait = 60 if "429" in str(exc) else 2 ** attempt
                     time.sleep(wait)
         raise LLMCallError(
             f"LLM call failed after {self.config.max_retries} attempts. "

@@ -37,7 +37,7 @@ def evaluate_generalizability(
     seed = config.get("pipeline", {}).get("random_seed", 42)
     alpha_gen = config.get("evaluation", {}).get("alpha_gen", [0.5, 0.5])
 
-    X_te = D_te.drop(columns=[outcome_col])
+    X_te = D_te.drop(columns=[outcome_col]).select_dtypes(include="number")
     y_te = D_te[outcome_col].values
 
     acc_per_b: List[float] = []
@@ -47,7 +47,7 @@ def evaluate_generalizability(
         if len(subset) < 2:
             continue
 
-        X_b = subset.drop(columns=[outcome_col])
+        X_b = subset.drop(columns=[outcome_col]).select_dtypes(include="number")
         y_b = subset[outcome_col]
 
         best_params = tune_hyperparams(

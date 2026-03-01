@@ -111,6 +111,16 @@
     .run-btn:active:not(:disabled) { transform: scale(.98); }
     .run-btn:disabled { background: #9ca3af; cursor: not-allowed; }
 
+    .stop-btn {
+      width: 100%; margin-top: 8px; padding: 9px;
+      background: #fff; color: var(--red); border: 1.5px solid var(--red);
+      border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+      display: none; align-items: center; justify-content: center; gap: 6px;
+      transition: background .2s;
+    }
+    .stop-btn:hover { background: var(--red-lt); }
+    .stop-btn.visible { display: flex; }
+
     /* ── Pipeline stepper ─────────────────────────────── */
     .stepper { display: flex; flex-direction: column; gap: 0; }
 
@@ -341,7 +351,9 @@
       <div class="field">
         <label>LLM Backend</label>
         <select name="llm_model">
-          <option value="qwen/qwen3-coder:free" selected>Qwen3 Coder 480B A35B — free (OpenRouter)</option>
+          <option value="meta-llama/llama-3.3-70b-instruct:free" selected>Llama 3.3 70B — free (OpenRouter)</option>
+          <option value="mistralai/mistral-small-3.1-24b-instruct:free">Mistral Small 3.1 24B — free (OpenRouter)</option>
+          <option value="qwen/qwen3-coder:free">Qwen3 Coder — free (OpenRouter)</option>
           <option value="qwen/qwen3-235b-a22b">Qwen3 235B-A22B (OpenRouter)</option>
           <option value="qwen/qwq-32b">QwQ 32B (OpenRouter)</option>
           <option value="gpt-4o">GPT-4o (OpenAI)</option>
@@ -355,6 +367,13 @@
           <polygon points="4,2 14,8 4,14" fill="currentColor"/>
         </svg>
         Run LIFT Pipeline
+      </button>
+
+      <button type="button" class="stop-btn" id="stop-btn">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor"/>
+        </svg>
+        Stop Run
       </button>
 
       <div class="error-bar" id="error-bar"></div>
@@ -472,6 +491,7 @@
 // ── State ──────────────────────────────────────────────
 let es = null;
 let scoreboard = [];
+let currentRunId = null;
 
 // ── Upload zone ────────────────────────────────────────
 const zone     = document.getElementById('upload-zone');
@@ -523,6 +543,8 @@ document.getElementById('run-form').addEventListener('submit', async e => {
       return;
     }
     const { run_id } = await res.json();
+    currentRunId = run_id;
+    showStopBtn();
     startStream(run_id);
   } catch (err) {
     showError('Network error: ' + err.message);
@@ -544,6 +566,7 @@ function startStream(run_id) {
     showError('Connection to server lost. The pipeline may still be running — check server logs.');
     es.close();
     resetBtn();
+    hideStopBtn();
   };
 }
 
@@ -560,6 +583,7 @@ function handleEvent(evt) {
     renderReport(report, scoreboard);
     showResults();
     resetBtn();
+    hideStopBtn();
     es.close();
     return;
   }
@@ -567,6 +591,7 @@ function handleEvent(evt) {
   if (stage === 'error') {
     showError(message || 'An unexpected error occurred.');
     resetBtn();
+    hideStopBtn();
     es.close();
     return;
   }
@@ -778,6 +803,21 @@ function scoreColor(v) {
   if (v >= 0.4) return { bg: '#fef9c3', fg: '#92400e' };
   return { bg: '#fee2e2', fg: '#991b1b' };
 }
+
+// ── Stop button ─────────────────────────────────────────
+document.getElementById('stop-btn').addEventListener('click', async () => {
+  if (!currentRunId) return;
+  document.getElementById('stop-btn').disabled = true;
+  document.getElementById('stop-btn').textContent = 'Stopping…';
+  await fetch(`/stop/${currentRunId}`, { method: 'POST' }).catch(() => {});
+  if (es) { es.close(); es = null; }
+  resetBtn();
+  hideStopBtn();
+  showError('Run stopped by user.');
+});
+
+function showStopBtn() { document.getElementById('stop-btn').classList.add('visible'); document.getElementById('stop-btn').disabled = false; document.getElementById('stop-btn').innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor"/></svg> Stop Run'; }
+function hideStopBtn() { document.getElementById('stop-btn').classList.remove('visible'); }
 
 // ── UI helpers ─────────────────────────────────────────
 function showResults() { document.getElementById('results-wrap').classList.add('show'); }

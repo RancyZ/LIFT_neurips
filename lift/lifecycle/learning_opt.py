@@ -42,7 +42,7 @@ def evaluate_learning_opt(
         if len(subset) < 2:
             continue
 
-        X_b = subset.drop(columns=[outcome_col])
+        X_b = subset.drop(columns=[outcome_col]).select_dtypes(include="number")
         y_b = subset[outcome_col]
 
         # Hyperparameter tuning

@@ -119,6 +119,7 @@ class LIFTPipeline:
             minority_ratio=self.config["pipeline"]["minority_ratio"],
             test_split=self.config["pipeline"]["test_split"],
             random_seed=self.config["pipeline"]["random_seed"],
+            id_col=xi.id_col,
         )
         emit({"stage": "preprocessing", "status": "done", "data": {
             "B": len(subsets),
@@ -139,7 +140,6 @@ class LIFTPipeline:
         run_config["_protected_col"] = xi.protected_col
 
         eval_results = run_lifecycle_stages(
-            D_tr=D_tr,
             D_te=D_te,
             subsets=subsets,
             decision=decision,
@@ -148,7 +148,13 @@ class LIFTPipeline:
         )
         self.last_eval_results = eval_results
         scoreboard = [
-            {"model_id": mid, "stage_id": sid, "score": round(r.score, 4)}
+            {
+                "model_id": mid,
+                "stage_id": sid,
+                "score": round(r.score, 4),
+                "acc": round(r.raw["Acc_i"], 4) if "Acc_i" in r.raw else None,
+                "spec": round(r.raw["Spec_i"], 4) if "Spec_i" in r.raw else None,
+            }
             for (mid, sid), r in eval_results.items()
         ]
         emit({"stage": "lifecycle", "status": "done", "data": {"scoreboard": scoreboard}})
@@ -163,6 +169,7 @@ class LIFTPipeline:
         emit({"stage": "reporting", "status": "done"})
 
         # Signal pipeline complete (exclude raw_llm_output to keep payload small)
+        f = decision.dataset_flags
         emit({"stage": "pipeline_done", "status": "done", "report": {
             "primary_model": report.primary_model,
             "primary_rationale": report.primary_rationale,
@@ -170,6 +177,21 @@ class LIFTPipeline:
             "avoid": report.avoid,
             "improvement_actions": report.improvement_actions,
             "stage_interpretations": report.stage_interpretations,
+            "activated_stages": decision.globally_activated_stages(),
+            "dataset_flags": {
+                "high_dimensionality":       f.high_dimensionality,
+                "large_n":                   f.large_n,
+                "high_incompleteness":       f.high_incompleteness,
+                "high_outcome_imbalance":    f.high_outcome_imbalance,
+                "high_population_imbalance": f.high_population_imbalance,
+                "balanced_dataset":          f.balanced_dataset,
+                "mixed_features":            f.mixed_features,
+                "dim_ratio_threshold":       f.dim_ratio_threshold,
+                "large_n_threshold":         f.large_n_threshold,
+                "incompleteness_threshold":  f.incompleteness_threshold,
+                "imbalance_threshold":       f.imbalance_threshold,
+                "balanced_threshold":        f.balanced_threshold,
+            },
         }})
 
         # Step 6: Save outputs

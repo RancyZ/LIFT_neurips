@@ -64,15 +64,18 @@ class DatasetFlags:
     Drives adaptive stage activation and sub-dimension emphasis.
     Computed in code, not by the LLM, so reasoning is auditable.
     """
-    high_incompleteness: bool       # C > threshold → emphasise l2, l3
-    high_dimensionality: bool       # N/P < threshold → emphasise l1
-    high_outcome_imbalance: bool    # I_out >> 1 → emphasise disparity in l3
-    high_population_imbalance: bool # I_pop >> 1 → emphasise disparity in l3
-    balanced_dataset: bool          # I_out & I_pop ≈ 1 → emphasise l4
+    high_incompleteness: bool       # C > threshold → favour robust models, activate l2
+    high_dimensionality: bool       # N/P < threshold → drop neural nets, activate l1, l2, l3
+    large_n: bool                   # N > threshold → include VAE/ResNet, activate l1
+    high_outcome_imbalance: bool    # I_out >> 1 → drop KNN/DT, activate l3 parity
+    high_population_imbalance: bool # I_pop >> 1 → activate l3 parity
+    balanced_dataset: bool          # I_out & I_pop ≈ 1 → activate l4
+    mixed_features: bool            # P_num > 0 and P_cat > 0 → include tree + linear models
 
     # Thresholds stored for traceability
     incompleteness_threshold: float = 0.2
     dim_ratio_threshold: float = 10.0
+    large_n_threshold: int = 5000
     imbalance_threshold: float = 3.0
     balanced_threshold: float = 1.5
 
@@ -82,6 +85,7 @@ class DatasetFlags:
         profile: DataProfile,
         incompleteness_threshold: float = 0.2,
         dim_ratio_threshold: float = 10.0,
+        large_n_threshold: int = 5000,
         imbalance_threshold: float = 3.0,
         balanced_threshold: float = 1.5,
     ) -> "DatasetFlags":
@@ -89,14 +93,17 @@ class DatasetFlags:
         return cls(
             high_incompleteness=profile.C > incompleteness_threshold,
             high_dimensionality=(profile.N / profile.P) < dim_ratio_threshold,
+            large_n=profile.N > large_n_threshold,
             high_outcome_imbalance=profile.I_out > imbalance_threshold,
             high_population_imbalance=profile.I_pop > imbalance_threshold,
             balanced_dataset=(
                 profile.I_out <= balanced_threshold and
                 profile.I_pop <= balanced_threshold
             ),
+            mixed_features=(profile.P_num > 0 and profile.P_cat > 0),
             incompleteness_threshold=incompleteness_threshold,
             dim_ratio_threshold=dim_ratio_threshold,
+            large_n_threshold=large_n_threshold,
             imbalance_threshold=imbalance_threshold,
             balanced_threshold=balanced_threshold,
         )
@@ -237,6 +244,7 @@ class DatasetContext:
     outcome_col: str
     protected_col: str
     cohort_notes: str
+    id_col: Optional[str] = None
     operational_constraints: Optional[str] = None
 
 

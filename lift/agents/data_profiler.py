@@ -91,11 +91,11 @@ class DataProfiler(BaseAgent):
         I_out = max(class_counts) / min(class_counts)
         I_pop = max(group_counts) / min(group_counts)
         """
-        # P = predictive features, excluding y and a  (paper definition)
-        feature_cols = [
-            c for c in df.columns
-            if c not in (xi.outcome_col, xi.protected_col)
-        ]
+        # P = predictive features, excluding outcome (y), protected attr (a), and id col
+        _exclude = {xi.outcome_col, xi.protected_col}
+        if xi.id_col:
+            _exclude.add(xi.id_col)
+        feature_cols = [c for c in df.columns if c not in _exclude]
 
         N = len(df)
         P = len(feature_cols)

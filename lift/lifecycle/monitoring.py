@@ -20,6 +20,7 @@ def evaluate_monitoring(
     subsets: List[pd.DataFrame],
     D_te: pd.DataFrame,
     outcome_col: str,
+    protected_col: str | None,
     config: dict,
     model_id: str = "dataset",
 ) -> StageResult:
@@ -30,11 +31,13 @@ def evaluate_monitoring(
 
     Score stored as raw drift value; pipeline inverts for scoreboard.
     """
-    X_te = D_te.drop(columns=[outcome_col]).select_dtypes(include="number")
+    drop_cols_te = [c for c in [outcome_col, protected_col] if c and c in D_te.columns]
+    X_te = D_te.drop(columns=drop_cols_te).select_dtypes(include="number")
 
     w_per_b: List[float] = []
     for subset in subsets:
-        X_b = subset.drop(columns=[outcome_col]).select_dtypes(include="number")
+        drop_cols = [c for c in [outcome_col, protected_col] if c and c in subset.columns]
+        X_b = subset.drop(columns=drop_cols).select_dtypes(include="number")
         w = wasserstein_mean(X_b, X_te)
         w_per_b.append(w)
 

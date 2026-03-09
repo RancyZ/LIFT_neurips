@@ -99,6 +99,7 @@ class RandomForestWrapper(BaseModelWrapper):
         from sklearn.ensemble import RandomForestClassifier
         self._model = RandomForestClassifier(
             n_estimators=n_estimators, criterion="gini",
+            max_features=None,  # paper: all features considered at each split
             bootstrap=True, random_state=42, n_jobs=-1,
         )
 
@@ -162,9 +163,12 @@ class BayesianRegressionWrapper(BaseModelWrapper):
         data = X.copy()
         data[self._outcome_col] = y.values
 
+        # Centered normal prior N(0, sigma) on all coefficients, per paper spec
+        priors = {col: bmb.Prior("Normal", mu=0, sigma=self.sigma)
+                  for col in self._feature_cols}
         formula = f"{self._outcome_col} ~ " + " + ".join(self._feature_cols)
-        self._model = bmb.Model(formula, data, family="bernoulli")
-        self._idata = self._model.fit(draws=200, tune=100, chains=2, progressbar=False)
+        self._model = bmb.Model(formula, data, family="bernoulli", priors=priors)
+        self._idata = self._model.fit(draws=50, tune=20, chains=1, progressbar=False)
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         proba = self.predict_proba(X)
@@ -327,19 +331,27 @@ class VAEWrapper(BaseModelWrapper):
         loader = DataLoader(ds, batch_size=128, shuffle=True)
 
         opt = torch.optim.Adam(self._net.parameters(), lr=self.lr)
-        bce_loss = nn.BCEWithLogitsLoss()
-        mse_loss = nn.MSELoss()
-        l1_loss = nn.L1Loss()
+        bce_loss     = nn.BCEWithLogitsLoss()
+        bce_rec_loss = nn.BCEWithLogitsLoss()  # reconstruction BCE (paper: weight 2)
+        l1_loss      = nn.L1Loss()             # reconstruction L1  (paper: weight 0.7)
+
+        # Normalise X to [0, 1] per feature for BCE reconstruction target
+        X_min = X_t.min(dim=0).values
+        X_max = X_t.max(dim=0).values
+        X_range = (X_max - X_min).clamp(min=1e-8)
 
         self._net.train()
         for _ in range(100):
             for xb, yb in loader:
                 xb, yb = xb.to(self._device), yb.to(self._device)
+                # Normalise this batch to [0, 1] to serve as BCE target
+                xb_norm = (xb - X_min.to(self._device)) / X_range.to(self._device)
                 opt.zero_grad()
                 logit, x_hat, mu, logvar = self._net(xb)
-                rec_bce = mse_loss(x_hat, xb)
-                rec_l1 = l1_loss(x_hat, xb)
-                kl = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+                # Loss = clf_BCE + 2·rec_BCE + 0.7·rec_L1 + 0.3·KL  (paper spec)
+                rec_bce = bce_rec_loss(x_hat, xb_norm)
+                rec_l1  = l1_loss(torch.sigmoid(x_hat), xb_norm)
+                kl      = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
                 clf_loss = bce_loss(logit, yb)
                 loss = clf_loss + 2.0 * rec_bce + 0.7 * rec_l1 + 0.3 * kl
                 loss.backward()
@@ -371,7 +383,7 @@ SUPPORTED_MODELS: Dict[str, type] = {
     "DT": DecisionTreeWrapper,
     "RF": RandomForestWrapper,
     "MLP": MLPWrapper,
-    "ResNet": ResNetWrapper,
+    "RN": ResNetWrapper,
     "VAE": VAEWrapper,
 }
 

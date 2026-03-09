@@ -23,6 +23,7 @@ from typing import Optional
 import pandas as pd
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -33,13 +34,9 @@ if _env_path.exists():
         _line = _line.strip()
         if _line and not _line.startswith("#") and "=" in _line:
             _k, _, _v = _line.partition("=")
-            _k, _v = _k.strip(), _v.strip()
+            _k, _v = _k.strip(), _v.strip().strip('"').strip("'")
             if _v:
                 os.environ.setdefault(_k, _v)
-                # Mirror OPENROUTER_API_KEY into OPENAI_API_KEY so the openai
-                # SDK picks it up automatically when using the OpenRouter backend.
-                if _k == "OPENROUTER_API_KEY":
-                    os.environ.setdefault("OPENAI_API_KEY", _v)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,7 +44,22 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
+# ── Startup key validation ────────────────────────────────────────────────────
+# All LLM traffic routes through OpenRouter. Fail fast here so the user
+# gets a clear message instead of a cryptic 401 mid-run.
+if not os.environ.get("OPENROUTER_API_KEY"):
+    raise EnvironmentError(
+        "OPENROUTER_API_KEY is not set. "
+        "Add OPENROUTER_API_KEY=<your-key> to your .env file and restart."
+    )
+# Guard: never let the OpenAI SDK silently route to api.openai.com.
+# Unsetting OPENAI_API_KEY means openai.OpenAI() without an explicit
+# base_url will raise AuthenticationError immediately instead of sending
+# the OpenRouter key to the wrong endpoint.
+os.environ.pop("OPENAI_API_KEY", None)
+
 app = FastAPI(title="LIFT Framework")
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 # In-memory run store: run_id → {"queue": Queue, "stop_event": Event}
 run_store: dict = {}
@@ -70,7 +82,7 @@ async def start_run(
     outcome_col: str = Form(...),
     protected_col: str = Form(...),
     cohort_notes: str = Form(...),
-    llm_model: str = Form(default="gpt-4o"),
+    id_col: str = Form(default=""),
 ) -> JSONResponse:
     """
     Accepts multipart form with CSV + dataset context.
@@ -82,8 +94,9 @@ async def start_run(
     stop_event = threading.Event()
     run_store[run_id] = {"queue": q, "stop_event": stop_event}
 
-    # Read bytes now — UploadFile is not thread-safe
+    # Read bytes and filename now — UploadFile is not thread-safe
     content = await file.read()
+    fname = file.filename or ""
 
     def run_pipeline() -> None:
         def progress_fn(event: dict) -> None:
@@ -92,7 +105,33 @@ async def start_run(
                 raise InterruptedError("Run stopped by user.")
 
         try:
-            df = pd.read_csv(io.BytesIO(content))
+            if fname.lower().endswith(".xlsx"):
+                df = pd.read_excel(io.BytesIO(content))
+            else:
+                for _enc in ("utf-8", "utf-8-sig", "latin-1"):
+                    try:
+                        df = pd.read_csv(io.BytesIO(content), encoding=_enc)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                else:
+                    raise ValueError(
+                        "Could not decode the CSV file. Please re-save it as UTF-8 and re-upload."
+                    )
+
+            # Drop ID column before anything else so it never counts as a feature
+            _id_col = id_col.strip() if id_col else ""
+            if _id_col and _id_col in df.columns:
+                df = df.drop(columns=[_id_col])
+
+            # Validate required columns exist before entering the pipeline
+            missing = [c for c in (outcome_col, protected_col) if c not in df.columns]
+            if missing:
+                raise ValueError(
+                    f"Column(s) {missing} not found in the uploaded file. "
+                    f"Available columns: {list(df.columns)}"
+                )
+
             q.put({
                 "stage": "upload",
                 "status": "done",
@@ -103,23 +142,13 @@ async def start_run(
             from lift.schemas import DatasetContext
 
             pipeline = LIFTPipeline(config_path="lift/config.yaml")
-            # Override LLM model from user selection
-            pipeline.config["llm"]["model"] = llm_model
-            # Reinitialise agents with new model
-            from lift.schemas import LLMConfig
-            llm_cfg = LLMConfig(**pipeline.config["llm"])
-            from lift.agents.data_profiler import DataProfiler
-            from lift.agents.model_orchestrator import ModelOrchestrator
-            from lift.agents.governance_reporter import GovernanceReporter
-            pipeline._profiler = DataProfiler(llm_cfg)
-            pipeline._orchestrator = ModelOrchestrator(llm_cfg)
-            pipeline._reporter = GovernanceReporter(llm_cfg)
 
             xi = DatasetContext(
                 domain=domain,
                 outcome_col=outcome_col,
                 protected_col=protected_col,
                 cohort_notes=cohort_notes,
+                id_col=_id_col or None,
             )
 
             pipeline.run(df, xi, _progress_fn=progress_fn, _stop_check=stop_event.is_set)

@@ -18,23 +18,19 @@ def evaluate_learning_opt(
     subsets: List[pd.DataFrame],
     D_te: pd.DataFrame,
     outcome_col: str,
+    protected_col: str | None,
+    best_params_per_b: List[dict],
     config: dict,
 ) -> StageResult:
     """
     For each b in 1..B:
-      1. Tune hyperparams via 5-fold CV within D_tr_b
-      2. Retrain on full D_tr_b with best params
-      3. Record training wall time T_i_b
+      1. Train on D_tr_b using pre-tuned hyperparams (tuning done once in runner)
+      2. Record training wall time T_i_b
 
     e_LeOp = mean(T_i_b for b in 1..B)  [lower = better]
     Normalised to [0,1] (inverted) for scoreboard.
     """
     from lift.models.model_factory import get_model
-    from lift.models.tuner import tune_hyperparams
-
-    hp_grid = config.get("models", {}).get("hyperparams", {}).get(model_id, {})
-    cv_folds = config.get("pipeline", {}).get("cv_folds", 5)
-    seed = config.get("pipeline", {}).get("random_seed", 42)
 
     times: List[float] = []
 
@@ -42,18 +38,11 @@ def evaluate_learning_opt(
         if len(subset) < 2:
             continue
 
-        X_b = subset.drop(columns=[outcome_col]).select_dtypes(include="number")
+        drop_cols = [c for c in [outcome_col, protected_col] if c and c in subset.columns]
+        X_b = subset.drop(columns=drop_cols).select_dtypes(include="number")
         y_b = subset[outcome_col]
 
-        # Hyperparameter tuning
-        best_params = tune_hyperparams(
-            model_id=model_id,
-            X_tr=X_b,
-            y_tr=y_b,
-            param_grid=hp_grid,
-            cv_folds=min(cv_folds, len(subset) // 2),
-            random_seed=seed + b_idx,
-        )
+        best_params = best_params_per_b[b_idx] if b_idx < len(best_params_per_b) else {}
 
         # Retrain and time
         model = get_model(model_id, best_params)

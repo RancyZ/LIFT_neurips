@@ -67,7 +67,7 @@ def explanation_consistency(
     H: int,
 ) -> float:
     """
-    S_exp = avg pairwise |H_a ∩ H_a'| / H over all pairs (a, a').
+    S_exp = avg pairwise Jaccard(H_a, H_a') = |H_a ∩ H_a'| / |H_a ∪ H_a'|.
     Returns float ∈ [0, 1].
     """
     group_list = list(top_H_sets.keys())

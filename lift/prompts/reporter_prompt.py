@@ -36,9 +36,11 @@ def build_user_prompt(
     profile: DataProfile,
     decision: OrchestratorDecision,
     xi: DatasetContext,
+    actual_stages: list | None = None,
 ) -> str:
-    # Activated stage descriptions
-    activated = decision.globally_activated_stages()
+    # Use actual evaluated stages (from eval_results) so l4 always appears
+    # even when the orchestrator didn't explicitly activate it
+    activated = sorted(actual_stages) if actual_stages else decision.globally_activated_stages()
     stage_desc = "\n".join(
         f"  {s}: {_STAGE_DESCRIPTIONS.get(s, s)}"
         for s in activated
@@ -48,15 +50,19 @@ def build_user_prompt(
     flags = decision.dataset_flags
     flag_lines = []
     if flags.high_dimensionality:
-        flag_lines.append("HIGH_DIMENSIONALITY — overfitting risk; favour simpler models")
+        flag_lines.append("HIGH_DIMENSIONALITY — small-N overfitting risk; simple models preferred, deployment stability prioritised")
+    if flags.large_n:
+        flag_lines.append("LARGE_N — sufficient data for complex models (VAE, ResNet); learning optimisation is key")
     if flags.high_incompleteness:
-        flag_lines.append(f"HIGH_INCOMPLETENESS (C={profile.C:.3f}) — missing-data risk affects robustness")
+        flag_lines.append(f"HIGH_INCOMPLETENESS (C={profile.C:.3f}) — missing-data risk; robust models favoured, generalizability scrutinised")
     if flags.high_outcome_imbalance:
-        flag_lines.append(f"HIGH_OUTCOME_IMBALANCE (I_out={profile.I_out:.2f}) — minority-class sensitivity is critical")
+        flag_lines.append(f"HIGH_OUTCOME_IMBALANCE (I_out={profile.I_out:.2f}) — minority-class sensitivity is critical; KNN/DT excluded")
     if flags.high_population_imbalance:
         flag_lines.append(f"HIGH_POPULATION_IMBALANCE (I_pop={profile.I_pop:.2f}) — subgroup parity is critical")
     if flags.balanced_dataset:
         flag_lines.append("BALANCED DATASET — distribution shift over time is the primary long-term risk")
+    if flags.mixed_features:
+        flag_lines.append("MIXED FEATURES — tree-based and linear models included for native mixed-type support")
     flags_block = "\n".join(f"  • {l}" for l in flag_lines) if flag_lines else "  • No extreme flags"
 
     narrative_block = (

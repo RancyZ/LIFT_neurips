@@ -1,15 +1,18 @@
 """
-BaseAgent — shared LLM API wrapper with retry logic.
-Supports both OpenAI (gpt-4o) and Anthropic (claude-*) models.
+BaseAgent — shared LLM API wrapper using OpenRouter exclusively.
+Model: configured via config.yaml  (default: qwen/qwen3-235b-a22b)
 """
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from typing import Union
 
 from lift.schemas import LLMConfig
+
+logger = logging.getLogger(__name__)
 
 
 class LLMCallError(Exception):
@@ -17,60 +20,39 @@ class LLMCallError(Exception):
 
 
 class BaseAgent:
+    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
     def __init__(self, config: LLMConfig) -> None:
         self.config = config
         self._client = None
-        self._backend = self._detect_backend(config.model)
 
     # ------------------------------------------------------------------
-    # Backend detection
+    # Client — OpenRouter only
     # ------------------------------------------------------------------
-
-    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-
-    @staticmethod
-    def _detect_backend(model: str) -> str:
-        if model.startswith("gpt") or model.startswith("o1") or model.startswith("o3"):
-            return "openai"
-        if model.startswith("claude"):
-            return "anthropic"
-        # OpenRouter passes any provider/model slug (e.g. "qwen/qwen3.5-35b-a3b")
-        if "/" in model or os.environ.get("OPENROUTER_API_KEY"):
-            return "openrouter"
-        raise ValueError(
-            f"Cannot determine LLM backend for model '{model}'. "
-            "Set OPENROUTER_API_KEY for third-party models, or use a model name "
-            "starting with 'gpt' (OpenAI) or 'claude' (Anthropic)."
-        )
 
     def _get_client(self):
         if self._client is not None:
             return self._client
-        if self._backend == "openai":
-            import openai
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise EnvironmentError("OPENAI_API_KEY not set in environment.")
-            self._client = openai.OpenAI(api_key=api_key)
-        elif self._backend == "openrouter":
-            import openai
-            api_key = os.environ.get("OPENROUTER_API_KEY")
-            if not api_key:
-                raise EnvironmentError("OPENROUTER_API_KEY not set in environment.")
-            self._client = openai.OpenAI(
-                api_key=api_key,
-                base_url=self.OPENROUTER_BASE_URL,
+        import openai
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            raise EnvironmentError(
+                "OPENROUTER_API_KEY is not set. "
+                "Add OPENROUTER_API_KEY=<your-key> to your .env file."
             )
-        else:
-            import anthropic
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise EnvironmentError("ANTHROPIC_API_KEY not set in environment.")
-            self._client = anthropic.Anthropic(api_key=api_key)
+        # base_url is always set explicitly — this prevents the openai SDK from
+        # ever falling back to api.openai.com even if OPENAI_API_KEY exists.
+        self._client = openai.OpenAI(
+            api_key=api_key,
+            base_url=self.OPENROUTER_BASE_URL,
+            default_headers={"HTTP-Referer": "https://github.com/LIFT-framework"},
+        )
+        logger.info("LLM client → OpenRouter (%s) / model: %s",
+                    self.OPENROUTER_BASE_URL, self.config.model)
         return self._client
 
     # ------------------------------------------------------------------
-    # Core LLM call
+    # Core LLM call with retry
     # ------------------------------------------------------------------
 
     def call_llm(
@@ -80,8 +62,8 @@ class BaseAgent:
         expect_json: bool = True,
     ) -> Union[dict, str]:
         """
-        Calls the configured LLM with retry logic.
-        If expect_json=True, parses and returns a dict.
+        Calls Qwen3 via OpenRouter with retry logic.
+        Returns a parsed dict when expect_json=True, raw str otherwise.
         Raises LLMCallError after exhausting retries.
         """
         last_exc: Exception | None = None
@@ -101,32 +83,18 @@ class BaseAgent:
             f"Last error: {last_exc}"
         ) from last_exc
 
-    # ------------------------------------------------------------------
-    # Backend-specific call
-    # ------------------------------------------------------------------
-
     def _call_once(self, prompt: str, system_prompt: str) -> str:
         client = self._get_client()
-        if self._backend in ("openai", "openrouter"):
-            response = client.chat.completions.create(
-                model=self.config.model,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-            )
-            return response.choices[0].message.content or ""
-        else:
-            response = client.messages.create(
-                model=self.config.model,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                system=system_prompt,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return response.content[0].text or ""
+        response = client.chat.completions.create(
+            model=self.config.model,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return response.choices[0].message.content or ""
 
     # ------------------------------------------------------------------
     # JSON parsing helper
@@ -135,10 +103,8 @@ class BaseAgent:
     @staticmethod
     def _parse_json(text: str) -> dict:
         text = text.strip()
-        # Strip markdown code fences if present
         if text.startswith("```"):
             lines = text.splitlines()
-            # Drop opening fence (and optional language tag) and closing fence
             lines = [l for l in lines if not l.strip().startswith("```")]
             text = "\n".join(lines).strip()
         return json.loads(text)

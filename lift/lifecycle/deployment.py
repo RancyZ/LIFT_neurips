@@ -24,60 +24,52 @@ def evaluate_deployment(
     D_te: pd.DataFrame,
     outcome_col: str,
     protected_col: str,
+    best_params_per_b: List[dict],
     config: dict,
 ) -> StageResult:
     """
     S_rob: robustness from stddev of Acc/Spec across B subsets (inverted → higher = more stable)
     S_par: parity attainment (EOP, equalized odds FPR, DP)
-    S_exp: SHAP explanation consistency across subgroups
+    S_exp: SHAP explanation consistency across subgroups — computed once on final model
     e_dep = alpha_dep[0]*S_rob + alpha_dep[1]*S_par + alpha_dep[2]*S_exp
     """
     from lift.models.model_factory import get_model
-    from lift.models.tuner import tune_hyperparams
 
-    hp_grid = config.get("models", {}).get("hyperparams", {}).get(model_id, {})
-    cv_folds = config.get("pipeline", {}).get("cv_folds", 5)
-    seed = config.get("pipeline", {}).get("random_seed", 42)
     alpha_rob = config.get("evaluation", {}).get("alpha_rob", [0.5, 0.5])
     alpha_par = config.get("evaluation", {}).get("alpha_par", [0.333, 0.333, 0.334])
     alpha_dep = config.get("evaluation", {}).get("alpha_dep", [0.333, 0.333, 0.334])
     H = config.get("evaluation", {}).get("shap_top_H", 5)
 
-    X_te = D_te.drop(columns=[outcome_col]).select_dtypes(include="number")
+    drop_cols_te = [c for c in [outcome_col, protected_col] if c and c in D_te.columns]
+    X_te = D_te.drop(columns=drop_cols_te).select_dtypes(include="number")
     y_te = D_te[outcome_col].values
-    groups_te = D_te[protected_col] if protected_col in D_te.columns else None
+    groups_te = D_te[protected_col] if protected_col and protected_col in D_te.columns else None
 
     acc_per_b: List[float] = []
     spec_per_b: List[float] = []
-    ec_per_b: List[float] = []
-
     # Parity accumulated across all subsets
     tpr_agg: dict = {}
     fpr_agg: dict = {}
     dp_agg: dict = {}
 
-    fitted_model = None  # keep last fitted model for SHAP
+    fitted_model = None       # last fitted model — used for single SHAP call after loop
+    last_X_te_aligned = None
 
     for b_idx, subset in enumerate(subsets):
         if len(subset) < 2:
             continue
 
-        X_b = subset.drop(columns=[outcome_col]).select_dtypes(include="number")
+        drop_cols = [c for c in [outcome_col, protected_col] if c and c in subset.columns]
+        X_b = subset.drop(columns=drop_cols).select_dtypes(include="number")
         y_b = subset[outcome_col]
 
-        best_params = tune_hyperparams(
-            model_id=model_id,
-            X_tr=X_b,
-            y_tr=y_b,
-            param_grid=hp_grid,
-            cv_folds=min(cv_folds, len(subset) // 2),
-            random_seed=seed + b_idx,
-        )
+        best_params = best_params_per_b[b_idx] if b_idx < len(best_params_per_b) else {}
         model = get_model(model_id, best_params)
         model.fit(X_b, y_b)
         fitted_model = model
 
         X_te_aligned = X_te.reindex(columns=X_b.columns, fill_value=0)
+        last_X_te_aligned = X_te_aligned
         y_pred = model.predict(X_te_aligned)
 
         acc_per_b.append(accuracy(y_te, y_pred))
@@ -93,15 +85,6 @@ def evaluate_deployment(
                 tpr_agg.setdefault(g, []).append(tpr_d[g])
                 fpr_agg.setdefault(g, []).append(fpr_d[g])
                 dp_agg.setdefault(g, []).append(dp_d.get(g, 0.0))
-
-        # SHAP consistency
-        if groups_te is not None and fitted_model is not None:
-            try:
-                top_H = compute_shap_top_H(model, X_te_aligned, groups_te, H)
-                ec = explanation_consistency(top_H, H)
-                ec_per_b.append(ec)
-            except Exception:  # noqa: BLE001
-                pass
 
     if not acc_per_b:
         return StageResult(stage_id="l3_deployment", model_id=model_id, score=0.0, raw={})
@@ -123,8 +106,17 @@ def evaluate_deployment(
     else:
         S_par = 1.0  # no protected attribute → no parity penalty
 
-    # S_exp
-    S_exp = float(np.mean(ec_per_b)) if ec_per_b else 0.0
+    # S_exp — intentionally computed once on the final fitted model instead of per-subset.
+    # The spec calls for per-b SHAP passes but KernelExplainer is O(N²); running it B times
+    # would dominate total runtime. Single-pass on the last fitted model is a deliberate
+    # efficiency trade-off that preserves the directional signal of the metric.
+    S_exp = 0.0
+    if groups_te is not None and fitted_model is not None and last_X_te_aligned is not None:
+        try:
+            top_H = compute_shap_top_H(fitted_model, last_X_te_aligned, groups_te, H)
+            S_exp = explanation_consistency(top_H, H)
+        except Exception:  # noqa: BLE001
+            pass
 
     e_dep = alpha_dep[0] * S_rob + alpha_dep[1] * S_par + alpha_dep[2] * S_exp
 

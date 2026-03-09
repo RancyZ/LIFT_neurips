@@ -55,7 +55,7 @@ def test_e2e_t1d_balanced():
     report = pipeline.run(df, xi)
 
     assert isinstance(report, GovReport)
-    valid_models = ["LR", "BR", "KNN", "SVM", "DT", "RF", "MLP", "ResNet", "VAE"]
+    valid_models = ["LR", "BR", "KNN", "SVM", "DT", "RF", "MLP", "RN", "VAE"]
     assert report.primary_model in valid_models, f"Unexpected primary model: {report.primary_model}"
     assert len(report.improvement_actions) > 0
 

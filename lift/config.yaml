@@ -1,12 +1,12 @@
 pipeline:
   B: 100                    # number of downsampled training subsets
-  minority_ratio: 0.4       # minority:majority = 2:3 → 0.4 of majority
+  minority_ratio: 0.6667    # minority:majority = 2:3  (n_min/n_maj = 2/3)
   test_split: 0.5           # 50/50 train/test
   cv_folds: 5               # for hyperparameter tuning
   random_seed: 42
 
 llm:
-  model: "meta-llama/llama-3.3-70b-instruct:free"   # OpenRouter model slug
+  model: "qwen/qwen3-235b-a22b"   # OpenRouter model slug
   temperature: 0.0                 # deterministic for profiler + orchestrator
   max_tokens: 1200
   max_retries: 5
@@ -19,7 +19,7 @@ evaluation:
   alpha_dep: [0.333, 0.333, 0.334]   # rob, par, exp weights
 
 models:
-  candidate_set: [LR, BR, KNN, SVM, DT, RF, MLP, ResNet, VAE]
+  candidate_set: [LR, BR, KNN, SVM, DT, RF, MLP, RN, VAE]
   hyperparams:
     LR:     { C: [0.001, 0.01, 0.1, 1, 10, 100, 1000] }
     BR:     { sigma: [1, 5, 10, 15, 20] }
@@ -28,5 +28,5 @@ models:
     DT:     { max_depth: [1, 2, 3, 4, 5] }
     RF:     { n_estimators: [10, 50, 100, 200, 300, 400] }
     MLP:    { lr: [0.001, 0.005, 0.01, 0.05, 0.1] }
-    ResNet: { lr: [0.001, 0.005, 0.01, 0.05, 0.1] }
+    RN: { lr: [0.001, 0.005, 0.01, 0.05, 0.1] }
     VAE:    { lr: [0.001, 0.005, 0.01, 0.05, 0.1] }

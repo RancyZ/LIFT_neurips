@@ -22,20 +22,27 @@ def build_user_prompt(
     flag_lines: List[str] = []
     if flags.high_dimensionality:
         flag_lines.append(
-            "HIGH_DIMENSIONALITY (N/P < 10): high overfitting risk — "
-            "prefer simpler models (LR, BR, SVM, DT, RF); penalise MLP/ResNet/VAE. "
-            "Activate l1_learning_opt and l2_generalizability."
+            "HIGH_DIMENSIONALITY (N/P < 10): small-N overfitting risk — "
+            "drop neural nets (MLP, RN, VAE); keep simple models (LR, BR, SVM, DT, RF). "
+            "Activate l1_learning_opt, l2_generalizability, AND l3_deployment (deployment stability)."
+        )
+    if flags.large_n:
+        flag_lines.append(
+            "LARGE_N (N > 5000): sufficient data for complex models — "
+            "include VAE and RN (ResNet) as viable candidates. "
+            "Activate l1_learning_opt (efficiency and optimisation)."
         )
     if flags.high_incompleteness:
         flag_lines.append(
-            "HIGH_INCOMPLETENESS (C > 0.20): missing-data risk — "
-            "activate l2_generalizability (missing_data_robustness) and "
-            "l3_deployment (robustness)."
+            "HIGH_INCOMPLETENESS (C > 0.20): high missing-data risk — "
+            "favour models robust to missingness (RF, SVM, LR, BR); "
+            "penalise KNN (distance-based, breaks on missing values). "
+            "Activate l2_generalizability (missing_data_robustness) and l3_deployment (robustness)."
         )
     if flags.high_outcome_imbalance:
         flag_lines.append(
             "HIGH_OUTCOME_IMBALANCE (I_out > 3): rare-event prediction risk — "
-            "exclude KNN (biased toward majority class) and DT (majority-class bias). "
+            "exclude KNN (majority-class bias) and DT (majority-class bias). "
             "Activate l3_deployment with high subgroup_parity and explainability emphasis."
         )
     if flags.high_population_imbalance:
@@ -46,7 +53,12 @@ def build_user_prompt(
     if flags.balanced_dataset:
         flag_lines.append(
             "BALANCED (I_out ≤ 1.5, I_pop ≤ 1.5): low immediate bias risk — "
-            "activate l4_monitoring to detect real-world distribution shift."
+            "retain all group-robust models; activate l4_monitoring to detect real-world distribution shift."
+        )
+    if flags.mixed_features:
+        flag_lines.append(
+            "MIXED_FEATURES (P_num > 0 and P_cat > 0): dataset contains both numerical and categorical features — "
+            "include tree-based models (RF, DT) and linear models (LR, BR) which handle mixed types natively."
         )
     if not flag_lines:
         flag_lines.append("No extreme dataset flags — apply standard evaluation coverage.")
@@ -58,6 +70,8 @@ def build_user_prompt(
     weight_guidance = "Equal weights (0.25 each) are a baseline. Adjust:"
     if flags.high_dimensionality:
         weight_guidance += " increase w2 (complexity) when N/P is small;"
+    if flags.large_n:
+        weight_guidance += " increase w1 (data-model fit) when N is large to reward expressiveness;"
     if flags.high_outcome_imbalance or flags.high_population_imbalance:
         weight_guidance += " increase w3 (interpretability) when imbalance is high;"
     if flags.high_incompleteness:

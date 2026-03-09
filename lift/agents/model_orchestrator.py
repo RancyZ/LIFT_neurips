@@ -38,7 +38,7 @@ class ModelOrchestrator(BaseAgent):
         "l3_deployment",
         "l4_monitoring",
     ]
-    ALL_MODELS = ["LR", "BR", "KNN", "SVM", "DT", "RF", "MLP", "ResNet", "VAE"]
+    ALL_MODELS = ["LR", "BR", "KNN", "SVM", "DT", "RF", "MLP", "RN", "VAE"]
 
     def __init__(self, config: LLMConfig) -> None:
         super().__init__(config)

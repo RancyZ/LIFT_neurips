@@ -50,12 +50,14 @@ class GovernanceReporter(BaseAgent):
         """
         scores_table = self._format_scores_table(eval_results)
         raw_metrics_block = self._format_raw_metrics(eval_results)
+        actual_stages = sorted({sid for (_, sid) in eval_results})
         user_prompt = rp_prompt.build_user_prompt(
             scores_table=scores_table,
             raw_metrics_block=raw_metrics_block,
             profile=profile,
             decision=decision,
             xi=xi,
+            actual_stages=actual_stages,
         )
         raw_text = self.call_llm(
             prompt=user_prompt,

@@ -30,11 +30,12 @@ logging.basicConfig(
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="LIFT Framework — run full pipeline")
-    p.add_argument("--dataset", default="lift/data/t1d_balanced.csv")
+    p.add_argument("--api-key", required=True, help="OpenRouter API key (sk-or-v1-…)")
+    p.add_argument("--dataset", required=True, help="Path to input CSV or XLSX file")
     p.add_argument("--outcome", default="y")
     p.add_argument("--protected", default="race")
-    p.add_argument("--domain", default="Type 1 diabetes risk prediction")
-    p.add_argument("--cohort", default="TEDDY-derived SNP cohort")
+    p.add_argument("--domain", required=True, help="Clinical domain description (e.g. 'cardiovascular risk prediction')")
+    p.add_argument("--cohort", required=True, help="Cohort description (e.g. 'NHANES 2017')")
     p.add_argument("--config", default="lift/config.yaml")
     return p.parse_args()
 
@@ -52,7 +53,7 @@ def main() -> None:
         cohort_notes=args.cohort,
     )
 
-    pipeline = LIFTPipeline(config_path=args.config)
+    pipeline = LIFTPipeline(config_path=args.config, api_key=args.api_key)
     report = pipeline.run(df, xi)
 
     print(f"\n{'='*60}")

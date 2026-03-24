@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIFT Scoreboards — Sample</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f5f5;
+    color: #222;
+    padding: 32px 24px 48px;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    font-size: 0.875rem;
+    color: #666;
+    margin-bottom: 32px;
+  }
+
+  /* ── Radar grid ─────────────────────────────────────── */
+  .radar-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 40px;
+  }
+  @media (max-width: 900px) {
+    .radar-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .radar-grid { grid-template-columns: 1fr; }
+  }
+
+  .chart-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px 16px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.04);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .chart-card h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    letter-spacing: 0.02em;
+    text-align: center;
+  }
+  .chart-card canvas {
+    max-width: 280px;
+    width: 100%;
+  }
+
+  /* ── Comparison table ───────────────────────────────── */
+  .table-section h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.04);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 520px;
+    font-size: 0.875rem;
+  }
+  thead tr {
+    background: #f0f0f0;
+  }
+  th, td {
+    padding: 10px 16px;
+    text-align: center;
+    border-bottom: 1px solid #e8e8e8;
+    white-space: nowrap;
+  }
+  th:first-child, td:first-child {
+    text-align: left;
+    font-weight: 600;
+    min-width: 200px;
+  }
+  th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafafa; }
+
+  /* score colour coding */
+  .score-green  { background: #d4edda; color: #155724; font-weight: 600; border-radius: 4px; }
+  .score-yellow { background: #fff3cd; color: #856404; font-weight: 600; border-radius: 4px; }
+  .score-red    { background: #f8d7da; color: #721c24; font-weight: 600; border-radius: 4px; }
+
+  .sample-badge {
+    display: inline-block;
+    background: #e8f0fe;
+    color: #1a56db;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    letter-spacing: 0.05em;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<h1>LIFT Scoreboards <span class="sample-badge">SAMPLE DATA</span></h1>
+<p class="subtitle">
+  Per-model lifecycle scores across all five evaluation stages (0 – 1, higher is better).
+  This file contains hardcoded demo data. Use
+  <code>export_scores_to_html()</code> from <code>lift/lift_scoreboards.py</code>
+  to generate a version populated with real pipeline results.
+</p>
+
+<div class="radar-grid" id="radarGrid"></div>
+
+<div class="table-section">
+  <h2>Summary Comparison</h2>
+  <div class="table-wrap">
+    <table id="summaryTable"></table>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   Sample data — representative scores from a T1D dataset run
+   matching Figure 4 / Figure 9 of the LIFT paper.
+   ───────────────────────────────────────────────────────────── */
+const SCOREBOARD = {
+  "LR": {
+    "Risk Prediction Models": 0.82,
+    "Generalizability":       0.78,
+    "Deployment":             0.71,
+    "Monitoring & Updating":  0.65,
+    "Learning & Optimization": 0.91
+  },
+  "BR": {
+    "Risk Prediction Models": 0.76,
+    "Generalizability":       0.81,
+    "Deployment":             0.74,
+    "Monitoring & Updating":  0.65,
+    "Learning & Optimization": 0.87
+  },
+  "SVM": {
+    "Risk Prediction Models": 0.70,
+    "Generalizability":       0.73,
+    "Deployment":             0.66,
+    "Monitoring & Updating":  0.65,
+    "Learning & Optimization": 0.62
+  },
+  "RF": {
+    "Risk Prediction Models": 0.88,
+    "Generalizability":       0.85,
+    "Deployment":             0.79,
+    "Monitoring & Updating":  0.65,
+    "Learning & Optimization": 0.54
+  },
+  "VAE": {
+    "Risk Prediction Models": 0.64,
+    "Generalizability":       0.68,
+    "Deployment":             0.58,
+    "Monitoring & Updating":  0.65,
+    "Learning & Optimization": 0.41
+  }
+};
+
+/* Axis order — Risk Prediction Models at top (12 o'clock), rest clockwise */
+const ACTIVATED_STAGES = [
+  "Risk Prediction Models",
+  "Generalizability",
+  "Deployment",
+  "Monitoring & Updating",
+  "Learning & Optimization"
+];
+
+/* ─────────────────────────────────────────────────────────────
+   Palette — blue, orange, green, red, purple, brown
+   ───────────────────────────────────────────────────────────── */
+const PALETTE = [
+  { bg: "rgba(70,130,180,0.22)",  border: "rgba(70,130,180,0.95)"  },
+  { bg: "rgba(255,160,0,0.22)",   border: "rgba(255,160,0,0.95)"   },
+  { bg: "rgba(60,180,113,0.22)",  border: "rgba(60,180,113,0.95)"  },
+  { bg: "rgba(210,55,55,0.22)",   border: "rgba(210,55,55,0.95)"   },
+  { bg: "rgba(148,103,189,0.22)", border: "rgba(148,103,189,0.95)" },
+  { bg: "rgba(150,98,50,0.22)",   border: "rgba(150,98,50,0.95)"   },
+];
+
+/* ─────────────────────────────────────────────────────────────
+   Helpers
+   ───────────────────────────────────────────────────────────── */
+function scoreClass(v) {
+  if (v === null || v === undefined) return "";
+  if (v >= 0.75) return "score-green";
+  if (v >= 0.50) return "score-yellow";
+  return "score-red";
+}
+
+function fmtScore(v) {
+  if (v === null || v === undefined) return "—";
+  return v.toFixed(3);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Chart data builder
+   ───────────────────────────────────────────────────────────── */
+function buildChartData(modelId, axes, colorIdx) {
+  const col    = PALETTE[colorIdx % PALETTE.length];
+  const values = axes.map(a => SCOREBOARD[modelId][a] ?? null);
+
+  return {
+    labels: axes,
+    datasets: [
+      /* Dashed outer reference circle at r = 1.0 */
+      {
+        label: "max",
+        data: axes.map(() => 1.0),
+        borderColor: "rgba(0,0,0,0.18)",
+        borderDash: [4, 4],
+        borderWidth: 1,
+        pointRadius: 0,
+        fill: false,
+        order: 1,
+      },
+      /* Model polygon */
+      {
+        label: modelId,
+        data: values,
+        backgroundColor: col.bg,
+        borderColor: col.border,
+        borderWidth: 2,
+        pointBackgroundColor: col.border,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        fill: true,
+        order: 0,
+      },
+    ],
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Radar chart options
+   ───────────────────────────────────────────────────────────── */
+function radarOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: { display: false },
+      title:  { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            if (ctx.dataset.label === "max") return null;
+            const v = ctx.raw;
+            return v !== null ? ` ${ctx.label}: ${v.toFixed(3)}` : null;
+          },
+        },
+        filter: item => item.dataset.label !== "max",
+      },
+    },
+    scales: {
+      r: {
+        min: 0,
+        max: 1,
+        beginAtZero: true,
+        ticks: {
+          stepSize: 0.25,
+          backdropColor: "transparent",
+          color: "#888",
+          font: { size: 9 },
+        },
+        grid: {
+          color: "rgba(0,0,0,0.08)",
+          lineWidth: 1,
+        },
+        angleLines: {
+          color: "rgba(0,0,0,0.10)",
+          lineWidth: 1,
+        },
+        pointLabels: {
+          font: { size: 10, weight: "500" },
+          color: "#333",
+          padding: 8,
+        },
+      },
+    },
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Render radar grid
+   ───────────────────────────────────────────────────────────── */
+(function renderRadarGrid() {
+  const grid   = document.getElementById("radarGrid");
+  const models = Object.keys(SCOREBOARD);
+  const axes   = ACTIVATED_STAGES;
+
+  models.forEach((modelId, idx) => {
+    const card = document.createElement("div");
+    card.className = "chart-card";
+
+    const title = document.createElement("h2");
+    title.textContent = modelId;
+    card.appendChild(title);
+
+    const canvas = document.createElement("canvas");
+    canvas.setAttribute("aria-label", `Radar chart for model ${modelId}`);
+    card.appendChild(canvas);
+    grid.appendChild(card);
+
+    new Chart(canvas, {
+      type: "radar",
+      data: buildChartData(modelId, axes, idx),
+      options: radarOptions(),
+    });
+  });
+})();
+
+/* ─────────────────────────────────────────────────────────────
+   Render summary comparison table
+   ───────────────────────────────────────────────────────────── */
+(function renderTable() {
+  const table  = document.getElementById("summaryTable");
+  const models = Object.keys(SCOREBOARD);
+  const axes   = ACTIVATED_STAGES;
+
+  /* Header row */
+  const thead = table.createTHead();
+  const hrow  = thead.insertRow();
+  const thStage = document.createElement("th");
+  thStage.textContent = "Stage";
+  hrow.appendChild(thStage);
+  models.forEach(m => {
+    const th = document.createElement("th");
+    th.textContent = m;
+    hrow.appendChild(th);
+  });
+
+  /* Body — one row per axis */
+  const tbody = table.createTBody();
+  axes.forEach(axis => {
+    const row     = tbody.insertRow();
+    const tdLabel = row.insertCell();
+    tdLabel.textContent = axis;
+    models.forEach(m => {
+      const v  = SCOREBOARD[m] ? SCOREBOARD[m][axis] : undefined;
+      const td = row.insertCell();
+      td.textContent = fmtScore(v);
+      td.className   = scoreClass(v);
+    });
+  });
+
+  /* Footer — mean scores */
+  const tfoot = table.createTFoot();
+  const frow  = tfoot.insertRow();
+  frow.style.fontWeight = "600";
+  frow.style.background = "#f0f0f0";
+  const tdMeanLabel = frow.insertCell();
+  tdMeanLabel.textContent = "Mean";
+  models.forEach(m => {
+    const scores = axes
+      .map(a => SCOREBOARD[m] ? SCOREBOARD[m][a] : undefined)
+      .filter(v => v !== undefined && v !== null);
+    const mean = scores.length
+      ? scores.reduce((a, b) => a + b, 0) / scores.length
+      : null;
+    const td = frow.insertCell();
+    td.textContent = fmtScore(mean);
+    td.className   = scoreClass(mean);
+  });
+})();
+</script>
+</body>
+</html>

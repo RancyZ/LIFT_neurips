@@ -196,7 +196,7 @@ class LIFTPipeline:
 
         # Step 6: Save outputs
         logger.info("Step 6: Saving outputs …")
-        self._save_outputs(profile, eval_results, report, dataset_tag, ts)
+        self._save_outputs(profile, eval_results, report, decision, dataset_tag, ts)
 
         logger.info("=== LIFT Pipeline complete ===")
         return report
@@ -205,7 +205,7 @@ class LIFTPipeline:
     # Output persistence
     # ------------------------------------------------------------------
 
-    def _save_outputs(self, profile, eval_results, report, tag, ts) -> None:
+    def _save_outputs(self, profile, eval_results, report, decision, tag, ts) -> None:
         base = Path(os.path.dirname(__file__)).parent / "outputs"
 
         # Profile JSON
@@ -231,6 +231,25 @@ class LIFTPipeline:
                 writer = csv.DictWriter(f, fieldnames=rows[0].keys())
                 writer.writeheader()
                 writer.writerows(rows)
+
+        # Scoreboard HTML radar chart
+        try:
+            from lift.lift_scoreboards import (
+                STAGE_ID_TO_LABEL,
+                compute_scoreboards,
+                export_scores_to_pdf,
+            )
+            scoreboard_dict = compute_scoreboards(eval_results, decision)
+            activated_labels = [
+                STAGE_ID_TO_LABEL[sid]
+                for sid in sorted({sid for (_, sid) in eval_results})
+                if sid in STAGE_ID_TO_LABEL
+            ]
+            pdf_dir = base / "scoreboards" / f"{tag}_{ts}"
+            export_scores_to_pdf(scoreboard_dict, activated_labels, pdf_dir)
+            logger.info("  Scoreboard PDFs written → %s", pdf_dir)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Scoreboard HTML export failed: %s", exc)
 
         # Report JSON
         rp_json = base / "reports" / f"{tag}_{ts}.json"

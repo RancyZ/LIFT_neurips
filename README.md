@@ -1,6 +1,6 @@
 # LIFT
 
-Supplementary code for *LIFT: A Lifecycle-Integrated Framework for Trustworthy Clinical Machine Learning*. LIFT profiles a clinical dataset, selects candidate models based on its characteristics, evaluates them across four lifecycle stages (learning efficiency, generalizability, fairness, and drift monitoring), and produces a governance report with model recommendations.
+Code for **LIFT: Agentic LLMs for Lifecycle-Based Workflow Testing in Healthcare Risk Prediction**. LIFT profiles a healthcare dataset, selects candidate models and evaluation stages based on its characteristics, assesses them across selected lifecycle stages, and produces a structured report with actionable recommendations.
 
 ## Requirements
 

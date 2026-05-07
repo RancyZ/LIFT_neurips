@@ -13,7 +13,7 @@ LIFT profiles a healthcare dataset, selects candidate models and evaluation stag
 
 ```bash
 git clone <repository-url>
-cd LIFT
+cd LIFT_neurips
 pip install -r requirements.txt
 ```
 

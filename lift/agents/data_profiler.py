@@ -1,10 +1,10 @@
 """
 DataProfiler — Agent 1 (Φ_data).
 
-Paper reference: Section 3.1.1, Equation 1.
+Paper reference: Equation 1.
   P_D ~ Φ_data(g(D, ξ_data))
 
-Design (per paper):
+Design:
 - All numeric metrics are computed DETERMINISTICALLY from the DataFrame.
 - The LLM adds a clinical narrative interpreting those metrics in context.
 - DataProfile is built from deterministic stats, not from LLM output,

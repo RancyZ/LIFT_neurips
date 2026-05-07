@@ -47,18 +47,18 @@ Any CSV or XLSX file with:
 - A binary outcome column (0/1)
 - A categorical protected attribute column (e.g. race, sex)
 
-Column names are case-sensitive. Missing values up to ~10% are handled automatically. Pass `--id-col` (CLI) or the optional ID column field (web UI) to exclude a patient identifier from the feature set.
+Column names are case-sensitive. Pass `--id-col` (CLI) or the optional ID column field (web UI) to exclude a patient identifier from the feature set.
 
 ## Pipeline stages
 
 | Stage | ID | Dimensions evaluated |
 |-------|----|----------------------|
-| Learning efficiency | L1 | Sample efficiency, learning curve behaviour |
+| Learning & Optimization | L1 | Sample efficiency, learning curve behaviour |
 | Generalizability | L2 | Discriminative power, missing-data robustness |
 | Deployment | L3 | Robustness, subgroup parity, explainability |
-| Monitoring | L4 | Drift detection |
+| Monitoring & Updating | L4 | Drift detection |
 
-Stages are activated adaptively per model based on dataset characteristics (sample size, dimensionality, class imbalance, missingness). The LLM orchestrator selects the candidate model set and routes each model through the relevant stages.
+Stages are activated adaptively per model based on dataset characteristics. The LLM Model Orchestrator selects the candidate model set and routes each model through the relevant stages.
 
 ## Outputs
 
@@ -68,10 +68,10 @@ Each run saves to `outputs/`:
 outputs/
   profiles/     — dataset statistics (N, P, missingness, class imbalance, group imbalance...)
   scoreboards/  — per-model lifecycle scores
-  reports/      — governance report (JSON + Markdown)
+  reports/      — final report (JSON + Markdown)
 ```
 
-The governance report identifies the recommended primary model, ranked alternatives, models to avoid, and per-model improvement actions.
+The final report identifies the recommended primary model, ranked alternatives, models to avoid, and per-model improvement actions.
 
 ## Configuration
 
@@ -79,7 +79,7 @@ Model and pipeline settings are in `lift/config.yaml`. Key options:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `llm.model` | `gpt-5.2` | Any model name from the [OpenAI models](https://platform.openai.com/docs/models) list |
+| `llm.model` | `gpt-5.2` | Model name from the [OpenAI models](https://platform.openai.com/docs/models) list |
 | `pipeline.test_split` | `0.5` | Train/test split ratio |
 | `pipeline.cv_folds` | `5` | Cross-validation folds for hyperparameter tuning |
 | `evaluation.shap_top_H` | `20` | Number of top features used in explainability score |
@@ -89,7 +89,7 @@ Model and pipeline settings are in `lift/config.yaml`. Key options:
 
 ```
 lift/
-  agents/       — LLM agents (data profiler, model orchestrator, governance reporter)
+  agents/       — LLM agents (data analyst, model orchestrator, report generator)
   evaluation/   — fairness, explainability, and metrics modules
   lifecycle/    — L1–L4 stage runners
   models/       — model factory, preprocessing, hyperparameter tuner

@@ -1,6 +1,8 @@
-# LIFT
+# LIFT: Agentic LLMs for Lifecycle-Based Workflow Testing in Healthcare Risk Prediction
 
-Code for **LIFT: Agentic LLMs for Lifecycle-Based Workflow Testing in Healthcare Risk Prediction**. LIFT profiles a healthcare dataset, selects candidate models and evaluation stages based on its characteristics, assesses them across selected lifecycle stages, and produces a structured report with actionable recommendations.
+Code for **LIFT: Agentic LLMs for Lifecycle-Based Workflow Testing in Healthcare Risk Prediction**. 
+
+LIFT profiles a healthcare dataset, selects candidate models and evaluation stages based on its characteristics, assesses them across selected lifecycle stages, and produces a structured report with actionable recommendations.
 
 ## Requirements
 

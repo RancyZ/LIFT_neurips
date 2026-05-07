@@ -2,7 +2,7 @@
 ModelOrchestrator — Agent 2 (Φ_model).
 Uses an LLM rubric to score candidate models and select lifecycle stages.
 
-Paper reference: Section 3.1.2, Equation 2.
+Paper reference: Equation 2.
   Φ_model(g(P_D, ξ_model)) = ({m_i}_{i∈I_D}, {l_j}_{j∈J_D})
 
 Composite score: ẽ = Σ w_k * r_{i,k}  (Eq. 4)

@@ -66,7 +66,7 @@ Each run saves to `outputs/`:
 
 ```
 outputs/
-  profiles/     — dataset statistics (N, P, missingness, class imbalance, group imbalance)
+  profiles/     — dataset statistics (N, P, missingness, class imbalance, group imbalance...)
   scoreboards/  — per-model lifecycle scores
   reports/      — governance report (JSON + Markdown)
 ```

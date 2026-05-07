@@ -1,7 +1,7 @@
 """
 GovernanceReporter — Agent 3 (Φ_rep).
 
-Paper reference: Section 3.1.3, Equation 3.
+Paper reference: Equation 3.
   R_D ~ Φ_rep(g(E_D, ξ_rep))
   R_D = ({e_l_j}_{j∈J_D}, γ_D)
 
